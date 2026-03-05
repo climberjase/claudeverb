@@ -201,6 +201,79 @@ class CombFilter:
         self._damp2 = np.float32(value)
 
 
+class AllpassFilter:
+    """Schroeder allpass filter.
+
+    Signal flow (Freeverb topology):
+        v[n] = x[n] + feedback * delay_out
+        y[n] = delay_out - feedback * v[n]
+        delay writes v[n]
+
+    Key property: |H(z)| = 1 for all frequencies (allpass), but phase
+    varies with frequency, creating time-smearing that adds density
+    to reverb tails.
+
+    Args:
+        delay_length: Delay in samples.
+        feedback: Feedback/feedforward coefficient (default 0.5, Freeverb default).
+    """
+
+    __slots__ = ("_delay", "_feedback")
+
+    def __init__(self, delay_length: int, feedback: float = 0.5) -> None:
+        self._delay = DelayLine(delay_length)
+        self._feedback = np.float32(feedback)
+
+    def process_sample(self, x: float) -> float:
+        """Process a single sample through the allpass filter.
+
+        Args:
+            x: Input sample.
+
+        Returns:
+            Filtered output sample as Python float.
+        """
+        delay_out = self._delay.read(self._delay._max_delay)
+        v = np.float32(x + self._feedback * delay_out)
+        y = np.float32(delay_out - self._feedback * v)
+        self._delay.write(float(v))
+        return float(y)
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        """Process a block of samples through the allpass filter.
+
+        Args:
+            block: Input samples, MUST be float32.
+
+        Returns:
+            Filtered output block as float32 ndarray.
+
+        Raises:
+            TypeError: If block is not float32.
+        """
+        if block.dtype != np.float32:
+            raise TypeError(
+                f"AllpassFilter.process() requires float32 input, got {block.dtype}"
+            )
+        output = np.empty(len(block), dtype=np.float32)
+        for i in range(len(block)):
+            output[i] = self.process_sample(float(block[i]))
+        return output
+
+    def reset(self) -> None:
+        """Reset filter to initial state."""
+        self._delay.reset()
+
+    @property
+    def feedback(self) -> float:
+        """Feedback coefficient."""
+        return float(self._feedback)
+
+    @feedback.setter
+    def feedback(self, value: float) -> None:
+        self._feedback = np.float32(value)
+
+
 class Biquad:
     """Biquad EQ filter using Direct Form II Transposed.
 
