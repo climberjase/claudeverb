@@ -1,0 +1,46 @@
+# claudeverb
+
+Python DSP workbench for evaluating and comparing reverb algorithms for use on microprocessors and audio plugins at 48 kHz.
+Outputs mel spectrograms, frequency analysis, and acoustic metrics (RT60, DRR, C80) and allows for A/B comparison of reverb algorithms.
+
+Support for features like varying the wet/dry ratio for listening tests via a web interface.
+
+Algorithms are designed for eventual C port to the
+[STM32 Daisy Seed](https://electro-smith.com/daisy) embedded audio platform.
+
+The primary goal of the workbench is to progressively add features to make reverb algorithm development through listening tests on a Mac
+and export the tweaked algorithms to the STM32 microcontrollers for guitar pedal use.  We will use LLMs to help design and tweak the
+algorithms we develop.
+
+## Setup
+
+
+## Algorithms
+
+| Algorithm | Status | Description |
+|-----------|--------|-------------|
+| Freeverb | ✅ Complete | Jezar's Schroeder-Moorer design (8 comb + 4 allpass/channel) |
+| Schroeder | 🚧 Stub | Original 1962 design (4 comb + 2 allpass) |
+| Plate (Dattorro) | 🚧 Stub | Dattorro figure-eight plate reverb |
+
+## Tests
+
+Multiple tests should test that the algorithms function as designed. Tests can be a mixture of audio file tests and
+impulse response tests, and any other audio signal / DSP tests as appropriate.
+
+The equivalent commercial algorithms loaded on this machine as .AU audio units for use in Logic should also be able to be used for 
+testing that the generated c/c++ code from this tool gives a comparable answer to a commercial algorithmn.
+
+## C Export (Daisy Seed)
+
+### Example for FreeVerb algorithm
+
+```python
+from claudeverb.algorithms.freeverb import Freeverb, FreeverbParams
+from claudeverb.export import export_algorithm
+
+algo = Freeverb(FreeverbParams(room_size=0.7))
+export_algorithm(algo, output_dir="./c_export")
+```
+
+Generates `Freeverb.h` and `Freeverb.c` targeting the libDaisy framework.
