@@ -1,10 +1,12 @@
 """DSP filter primitives for claudeverb.
 
 This module contains the fundamental building blocks used by reverb algorithms:
-delay lines, comb filters, and allpass filters.
+delay lines, comb filters, allpass filters, and biquad EQ filters.
 """
 
 from __future__ import annotations
+
+import math
 
 import numpy as np
 
@@ -197,3 +199,235 @@ class CombFilter:
     def damp(self, value: float) -> None:
         self._damp1 = np.float32(1.0 - value)
         self._damp2 = np.float32(value)
+
+
+class Biquad:
+    """Biquad EQ filter using Direct Form II Transposed.
+
+    Implements five standard EQ filter types via factory classmethods,
+    using the Bristow-Johnson Audio EQ Cookbook formulas.
+
+    All coefficient math uses Python's ``math`` module (maps to C math.h).
+    No scipy or numpy trig functions are used in production code.
+
+    State consists only of float32 scalars and a sample_rate int,
+    ensuring direct portability to a C struct.
+
+    Args:
+        b0, b1, b2: Numerator (feedforward) coefficients.
+        a1, a2: Denominator (feedback) coefficients (a0 is normalized to 1).
+        sample_rate: Sample rate in Hz (default 48000).
+    """
+
+    __slots__ = ("b0", "b1", "b2", "a1", "a2", "d1", "d2", "sample_rate")
+
+    def __init__(
+        self,
+        b0: float,
+        b1: float,
+        b2: float,
+        a1: float,
+        a2: float,
+        sample_rate: int = 48000,
+    ) -> None:
+        self.b0 = np.float32(b0)
+        self.b1 = np.float32(b1)
+        self.b2 = np.float32(b2)
+        self.a1 = np.float32(a1)
+        self.a2 = np.float32(a2)
+        self.d1 = np.float32(0.0)
+        self.d2 = np.float32(0.0)
+        self.sample_rate = sample_rate
+
+    def process_sample(self, x: float) -> float:
+        """Process a single sample through the biquad filter (DF2T).
+
+        Args:
+            x: Input sample value.
+
+        Returns:
+            Filtered output sample as Python float.
+        """
+        y = self.b0 * x + self.d1
+        self.d1 = np.float32(self.b1 * x - self.a1 * y + self.d2)
+        self.d2 = np.float32(self.b2 * x - self.a2 * y)
+        return float(y)
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        """Process a block of samples through the biquad filter.
+
+        Args:
+            block: Input samples, MUST be float32.
+
+        Returns:
+            Filtered output block as float32 ndarray.
+
+        Raises:
+            TypeError: If block is not float32.
+        """
+        if block.dtype != np.float32:
+            raise TypeError(
+                f"Biquad.process() requires float32 input, got {block.dtype}"
+            )
+        output = np.empty(len(block), dtype=np.float32)
+        for i in range(len(block)):
+            output[i] = self.process_sample(float(block[i]))
+        return output
+
+    def reset(self) -> None:
+        """Zero d1 and d2 filter state."""
+        self.d1 = np.float32(0.0)
+        self.d2 = np.float32(0.0)
+
+    def set_coefficients(
+        self, b0: float, b1: float, b2: float, a1: float, a2: float
+    ) -> None:
+        """Update filter coefficients without resetting state.
+
+        This allows smooth parameter changes (e.g. EQ sweeps) without
+        audible clicks from resetting the delay elements.
+
+        Args:
+            b0, b1, b2: Numerator coefficients.
+            a1, a2: Denominator coefficients (a0 normalized to 1).
+        """
+        self.b0 = np.float32(b0)
+        self.b1 = np.float32(b1)
+        self.b2 = np.float32(b2)
+        self.a1 = np.float32(a1)
+        self.a2 = np.float32(a2)
+
+    # -- Factory classmethods (Bristow-Johnson Audio EQ Cookbook) --
+
+    @classmethod
+    def lowpass(cls, freq: float, q: float, sample_rate: int = 48000) -> Biquad:
+        """Create a lowpass biquad filter.
+
+        Args:
+            freq: Cutoff frequency in Hz.
+            q: Quality factor (0.707 = Butterworth).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        alpha = math.sin(w0) / (2.0 * q)
+
+        b0 = (1.0 - cos_w0) / 2.0
+        b1 = 1.0 - cos_w0
+        b2 = (1.0 - cos_w0) / 2.0
+        a0 = 1.0 + alpha
+        a1 = -2.0 * cos_w0
+        a2 = 1.0 - alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
+    def highpass(cls, freq: float, q: float, sample_rate: int = 48000) -> Biquad:
+        """Create a highpass biquad filter.
+
+        Args:
+            freq: Cutoff frequency in Hz.
+            q: Quality factor (0.707 = Butterworth).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        alpha = math.sin(w0) / (2.0 * q)
+
+        b0 = (1.0 + cos_w0) / 2.0
+        b1 = -(1.0 + cos_w0)
+        b2 = (1.0 + cos_w0) / 2.0
+        a0 = 1.0 + alpha
+        a1 = -2.0 * cos_w0
+        a2 = 1.0 - alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
+    def notch(cls, freq: float, q: float, sample_rate: int = 48000) -> Biquad:
+        """Create a notch (band-reject) biquad filter.
+
+        Args:
+            freq: Center frequency in Hz.
+            q: Quality factor (higher = narrower notch).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        alpha = math.sin(w0) / (2.0 * q)
+
+        b0 = 1.0
+        b1 = -2.0 * cos_w0
+        b2 = 1.0
+        a0 = 1.0 + alpha
+        a1 = -2.0 * cos_w0
+        a2 = 1.0 - alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
+    def bandpass(cls, freq: float, q: float, sample_rate: int = 48000) -> Biquad:
+        """Create a bandpass biquad filter.
+
+        Args:
+            freq: Center frequency in Hz.
+            q: Quality factor (higher = narrower pass band).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        alpha = math.sin(w0) / (2.0 * q)
+
+        b0 = alpha
+        b1 = 0.0
+        b2 = -alpha
+        a0 = 1.0 + alpha
+        a1 = -2.0 * cos_w0
+        a2 = 1.0 - alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
+    def parametric(
+        cls,
+        freq: float,
+        q: float,
+        gain_db: float,
+        sample_rate: int = 48000,
+    ) -> Biquad:
+        """Create a parametric (peaking) EQ biquad filter.
+
+        Args:
+            freq: Center frequency in Hz.
+            q: Quality factor (higher = narrower bandwidth).
+            gain_db: Boost/cut in dB at center frequency.
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        a_lin = 10.0 ** (gain_db / 40.0)
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        alpha = math.sin(w0) / (2.0 * q)
+
+        b0 = 1.0 + alpha * a_lin
+        b1 = -2.0 * cos_w0
+        b2 = 1.0 - alpha * a_lin
+        a0 = 1.0 + alpha / a_lin
+        a1 = -2.0 * cos_w0
+        a2 = 1.0 - alpha / a_lin
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
