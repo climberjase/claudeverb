@@ -10,30 +10,29 @@ class TestDelayLineBasic:
     """Core delay line behavior tests."""
 
     def test_impulse_at_correct_delay(self):
-        """Impulse written at sample 0 appears at exactly sample N when reading at delay N."""
+        """Impulse written at sample 0 appears at exactly sample N when reading at delay N.
+
+        Uses process() which reads-before-writes each sample, so a delay of N
+        means the impulse appears in the output N samples after the input.
+        """
         delay_samples = 10
         dl = DelayLine(max_delay=64)
 
-        # Write impulse at sample 0
-        dl.write(1.0)
+        # Create input: impulse at sample 0, rest zeros
+        input_block = np.zeros(20, dtype=np.float32)
+        input_block[0] = 1.0
 
-        # Advance by writing zeros for delay_samples - 1 more samples
-        # (we already wrote 1 sample), reading each time
-        outputs = []
-        outputs.append(dl.read(delay_samples))  # read after first write
+        output = dl.process(input_block, delay=float(delay_samples))
 
-        for _ in range(delay_samples - 1):
-            dl.write(0.0)
-            outputs.append(dl.read(delay_samples))
-
-        # After writing exactly delay_samples total samples (1 impulse + N-1 zeros),
-        # the impulse should now be at position delay_samples behind write head
-        dl.write(0.0)
-        result = dl.read(delay_samples)
-
-        assert result == pytest.approx(1.0), (
-            f"Impulse should appear at delay {delay_samples}, got {result}"
+        # Impulse should appear at exactly index delay_samples
+        assert output[delay_samples] == pytest.approx(1.0), (
+            f"Impulse should appear at index {delay_samples}, got {output[delay_samples]}"
         )
+        # Should be zero before the delay
+        for i in range(delay_samples):
+            assert output[i] == pytest.approx(0.0), (
+                f"Output should be 0 at index {i} (before delay), got {output[i]}"
+            )
 
     def test_fractional_delay_interpolation(self):
         """Reading at fractional delay returns linearly interpolated value."""
@@ -96,16 +95,15 @@ class TestDelayLineBasic:
             assert dl.read(float(delay)) == pytest.approx(0.0)
 
     def test_delayed_sequence(self):
-        """Writing and reading N samples produces the same sequence delayed by N."""
+        """Writing and reading N samples produces the same sequence delayed by N.
+
+        Uses process() which enforces read-before-write ordering.
+        """
         delay_samples = 5
         dl = DelayLine(max_delay=64)
 
         input_signal = np.arange(20, dtype=np.float32)
-        output_signal = np.zeros(20, dtype=np.float32)
-
-        for i, sample in enumerate(input_signal):
-            dl.write(sample)
-            output_signal[i] = dl.read(float(delay_samples))
+        output_signal = dl.process(input_signal, delay=float(delay_samples))
 
         # After delay_samples, output should match input shifted by delay
         for i in range(delay_samples, 20):
@@ -123,6 +121,8 @@ class TestDelayLineBasic:
             dl.write(float(i))
 
         # Should still read correctly after wrapping
+        # read(1) = most recently written sample = max_delay*3 - 1
+        # read(2) = second most recent = max_delay*3 - 2
         last_written = float(max_delay * 3 - 1)
-        assert dl.read(1.0) == pytest.approx(last_written - 1)
-        assert dl.read(2.0) == pytest.approx(last_written - 2)
+        assert dl.read(1.0) == pytest.approx(last_written)
+        assert dl.read(2.0) == pytest.approx(last_written - 1)
