@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from claudeverb.config import SAMPLE_RATE
+from claudeverb.config import BUFFER_SIZE, SAMPLE_RATE
 
 
 @pytest.fixture
@@ -35,3 +35,26 @@ def short_impulse() -> np.ndarray:
     signal = np.zeros(256, dtype=np.float32)
     signal[0] = 1.0
     return signal
+
+
+@pytest.fixture
+def comb_ir() -> np.ndarray:
+    """IR from CombFilter(delay_samples=1557, feedback=0.84, damp=0.0).
+
+    3-second impulse processed through the comb filter in BUFFER_SIZE blocks.
+    Analytical RT60 ~ 1.28s.
+    """
+    from claudeverb.algorithms.filters import CombFilter
+
+    comb = CombFilter(delay_length=1557, feedback=0.84, damp=0.0)
+    duration_samples = SAMPLE_RATE * 3  # 3 seconds
+    impulse = np.zeros(duration_samples, dtype=np.float32)
+    impulse[0] = 1.0
+
+    output = np.zeros(duration_samples, dtype=np.float32)
+    for start in range(0, duration_samples, BUFFER_SIZE):
+        end = min(start + BUFFER_SIZE, duration_samples)
+        block = impulse[start:end]
+        output[start:end] = comb.process(block)
+
+    return output
