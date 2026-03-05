@@ -41,7 +41,7 @@ def test_delay_scaling():
     from claudeverb.algorithms.freeverb import Freeverb
 
     # Expected scaled values: round(length * 48000 / 44100)
-    expected_comb = [1694, 1760, 1623, 1548, 1476, 1390, 1293, 1215]
+    expected_comb = [1695, 1760, 1623, 1548, 1476, 1390, 1293, 1215]
     expected_allpass = [245, 605, 480, 371]
     expected_spread = 25
 
@@ -168,7 +168,7 @@ def test_stereo_mode_mono():
 
 
 def test_stereo_mode_wide():
-    """Set switch2=1, process stereo -- L/R differ more than default width."""
+    """Set switch2=1, process stereo -- L/R differ more than same width in normal mode."""
     from claudeverb.algorithms.freeverb import Freeverb
 
     n = SAMPLE_RATE
@@ -176,14 +176,15 @@ def test_stereo_mode_wide():
     stereo_impulse[0, 0] = 1.0
     stereo_impulse[1, 0] = 1.0
 
-    # Default stereo
+    # Normal stereo with width=40 (below max, so wide can increase it)
     fv_default = Freeverb()
+    fv_default.update_params({"width": 40})
     out_default = fv_default.process(stereo_impulse.copy())
     diff_default = np.sum((out_default[0] - out_default[1]) ** 2)
 
-    # Wide stereo
+    # Wide stereo with same base width=40 (switch doubles to 80 internally)
     fv_wide = Freeverb()
-    fv_wide.update_params({"switch2": 1})
+    fv_wide.update_params({"width": 40, "switch2": 1})
     out_wide = fv_wide.process(stereo_impulse.copy())
     diff_wide = np.sum((out_wide[0] - out_wide[1]) ** 2)
 
