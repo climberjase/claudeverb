@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claudeverb"
+version = "0.1.0"
+description = "Python DSP workbench for evaluating reverb algorithms at 48 kHz"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "soundfile",
+    "sounddevice",
+    "librosa",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+ui = [
+    "PySide6",
+]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
