@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Audio I/O
 
-- [ ] **AIO-01**: User can load audio files from disk (WAV/AIFF) with automatic resampling to 48 kHz
-- [ ] **AIO-02**: Workbench ships with bundled test samples (dry drums, guitar, vocals, impulse click)
+- [x] **AIO-01**: User can load audio files from disk (WAV/AIFF) with automatic resampling to 48 kHz
+- [x] **AIO-02**: Workbench ships with bundled test samples (dry drums, guitar, vocals, impulse click)
 - [ ] **AIO-03**: User can play, stop, and loop processed audio output
 - [ ] **AIO-04**: User can generate an impulse response from any algorithm with current parameters
 
