@@ -35,9 +35,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Processing & Playback
 
-- [ ] **PLAY-01**: Process-then-play workflow: user tweaks parameters, clicks process, listens to result
-- [ ] **PLAY-02**: Wet/dry mix slider (0-100%) applied at output stage, not inside algorithm
-- [ ] **PLAY-03**: Audio waveform display showing input and output amplitude envelopes with reverb tail visible
+- [x] **PLAY-01**: Process-then-play workflow: user tweaks parameters, clicks process, listens to result
+- [x] **PLAY-02**: Wet/dry mix slider (0-100%) applied at output stage, not inside algorithm
+- [x] **PLAY-03**: Audio waveform display showing input and output amplitude envelopes with reverb tail visible
 
 ### Analysis
 
