@@ -47,11 +47,12 @@ Plans:
   3. Freeverb produces audibly correct reverb output with all 6 knobs at default positions and responds meaningfully to parameter changes
   4. Every knob position (0-100) and switch position (-1, 0, 1) produces stable output without clipping, distortion, or runaway feedback
   5. Algorithm registry returns Freeverb when queried and algorithm state fully resets between processing runs
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Audio I/O (load/save) + bundled test samples
+- [ ] 02-02-PLAN.md -- Freeverb algorithm + registry
+- [ ] 02-03-PLAN.md -- Impulse response generation + end-to-end integration
 
 ### Phase 3: Analysis Metrics
 **Goal**: The workbench can quantitatively characterize any reverb output using standard acoustic metrics, giving developers numbers alongside their ears
@@ -107,8 +108,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. DSP Foundation | 1/3 | In Progress | - |
-| 2. Audio I/O + Freeverb | 0/? | Not started | - |
+| 1. DSP Foundation | 3/3 | Complete | - |
+| 2. Audio I/O + Freeverb | 0/3 | Planning | - |
 | 3. Analysis Metrics | 0/? | Not started | - |
 | 4. Engine + Streamlit UI | 0/? | Not started | - |
 | 5. Dattorro Plate Algorithm | 0/? | Not started | - |
