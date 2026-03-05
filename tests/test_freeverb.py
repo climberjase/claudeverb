@@ -207,3 +207,21 @@ def test_mix_knob_wet(impulse):
     fv.update_params({"mix": 100})
     output = fv.process(impulse.copy())
     assert not np.allclose(output, impulse), "Fully wet output should differ from input"
+
+
+def test_registry():
+    """ALGORITHM_REGISTRY contains Freeverb class."""
+    from claudeverb.algorithms import ALGORITHM_REGISTRY
+    from claudeverb.algorithms.freeverb import Freeverb
+
+    assert "freeverb" in ALGORITHM_REGISTRY
+    assert ALGORITHM_REGISTRY["freeverb"] is Freeverb
+
+
+def test_registry_instantiate():
+    """ALGORITHM_REGISTRY['freeverb'] creates a valid ReverbAlgorithm."""
+    from claudeverb.algorithms import ALGORITHM_REGISTRY
+    from claudeverb.algorithms.base import ReverbAlgorithm
+
+    algo = ALGORITHM_REGISTRY["freeverb"]()
+    assert isinstance(algo, ReverbAlgorithm)
