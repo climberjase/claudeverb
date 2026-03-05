@@ -7,7 +7,18 @@
       "Bash(git config --global user.name)",
       "Bash(git config --global user.email)",
       "Bash(brew install gh)",
-      "Bash(/opt/homebrew/bin/gh auth status)"
+      "Bash(/opt/homebrew/bin/gh auth status)",
+      "Bash(/opt/homebrew/bin/gh repo create claudeverb --public --source=. --remote=origin --push)",
+      "Bash(node:*)",
+      "WebSearch",
+      "Skill(gsd:discuss-phase)",
+      "Skill(gsd:plan-phase)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(grep:*)",
+      "Bash(test:*)",
+      "Bash(git:*)"
     ]
   }
 }

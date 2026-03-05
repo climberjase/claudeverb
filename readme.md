@@ -23,6 +23,8 @@ algorithms we develop.
 | Schroeder | 🚧 Stub | Original 1962 design (4 comb + 2 allpass) |
 | Plate (Dattorro) | 🚧 Stub | Dattorro figure-eight plate reverb |
 
+Other algorithms based on FDN, Dattoro, Neunaber Web etc. and similar algorithms should be added over time.
+
 ## Tests
 
 Multiple tests should test that the algorithms function as designed. Tests can be a mixture of audio file tests and
@@ -32,6 +34,8 @@ The equivalent commercial algorithms loaded on this machine as .AU audio units f
 testing that the generated c/c++ code from this tool gives a comparable answer to a commercial algorithmn.
 
 ## C Export (Daisy Seed)
+
+NOTE: this section can be changed if needed for the new implementations, so use this as a rough guide only.
 
 ### Example for FreeVerb algorithm
 
