@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: DSP Foundation** - Core primitives (delay lines, comb/allpass filters, EQ) with C-portability constraints enforced from the start (completed 2026-03-05)
 - [x] **Phase 2: Audio I/O + Freeverb** - First complete audio path: load files, process through Freeverb, output processed audio (completed 2026-03-05)
-- [ ] **Phase 3: Analysis Metrics** - Quantitative analysis tools (RT60, DRR, C80, spectrograms, FFT) validated against known analytical results
+- [x] **Phase 3: Analysis Metrics** - Quantitative analysis tools (RT60, DRR, C80, spectrograms, FFT) validated against known analytical results (completed 2026-03-05)
 - [ ] **Phase 4: Engine + Streamlit UI** - Process-then-play workflow with full web interface for parameter tweaking, listening, and visual analysis
 - [ ] **Phase 5: Dattorro Plate Algorithm** - Figure-eight tank reverb with modulated delay lines, the primary target algorithm for guitar pedal deployment
 
@@ -64,7 +64,7 @@ Plans:
   3. Mel spectrogram visualization renders correctly for both mono and stereo audio
   4. FFT magnitude comparison plot shows input vs. output frequency content as an overlay
   5. Spectral centroid delta between input and output is computed and reported as a single number
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 03-01-PLAN.md -- Acoustic metrics (RT60, DRR, C80/C50, spectral centroid delta)
@@ -110,6 +110,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. DSP Foundation | 3/3 | Complete | - |
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
-| 3. Analysis Metrics | 1/2 | In Progress|  |
+| 3. Analysis Metrics | 2/2 | Complete   | 2026-03-05 |
 | 4. Engine + Streamlit UI | 0/? | Not started | - |
 | 5. Dattorro Plate Algorithm | 0/? | Not started | - |
