@@ -64,11 +64,11 @@ Plans:
   3. Mel spectrogram visualization renders correctly for both mono and stereo audio
   4. FFT magnitude comparison plot shows input vs. output frequency content as an overlay
   5. Spectral centroid delta between input and output is computed and reported as a single number
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Acoustic metrics (RT60, DRR, C80/C50, spectral centroid delta)
+- [ ] 03-02-PLAN.md -- Spectral visualization (mel spectrogram, FFT magnitude overlay)
 
 ### Phase 4: Engine + Streamlit UI
 **Goal**: A developer can open a web browser, load audio, select an algorithm, tweak parameters, process, listen, and see analysis results -- the complete workbench workflow
@@ -110,6 +110,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. DSP Foundation | 3/3 | Complete | - |
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
-| 3. Analysis Metrics | 0/? | Not started | - |
+| 3. Analysis Metrics | 0/2 | Planning complete | - |
 | 4. Engine + Streamlit UI | 0/? | Not started | - |
 | 5. Dattorro Plate Algorithm | 0/? | Not started | - |
