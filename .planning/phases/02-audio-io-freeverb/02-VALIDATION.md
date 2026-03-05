@@ -38,16 +38,16 @@ created: 2026-03-04
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 0 | AIO-01 | unit | `pytest tests/test_audio_io.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-02 | 01 | 0 | AIO-02 | unit | `pytest tests/test_samples.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-03 | 01 | 0 | AIO-04 | unit | `pytest tests/test_impulse_response.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-04 | 01 | 0 | ALG-01 | unit+integration | `pytest tests/test_freeverb.py -x` | ❌ W0 | ⬜ pending |
-| 02-01-05 | 01 | 0 | ALG-03 | unit | `pytest tests/test_freeverb.py::test_param_specs -x` | ❌ W0 | ⬜ pending |
-| 02-01-06 | 01 | 0 | ALG-04 | unit | `pytest tests/test_freeverb.py::test_registry -x` | ❌ W0 | ⬜ pending |
-| 02-01-07 | 01 | 0 | ALG-05 | unit | `pytest tests/test_freeverb.py::test_reset -x` | ❌ W0 | ⬜ pending |
-| 02-01-08 | 01 | 0 | ALG-06 | unit | `pytest tests/test_freeverb.py::test_delay_scaling -x` | ❌ W0 | ⬜ pending |
+| 02-01-01 | 01 | 0 | AIO-01 | unit | `pytest tests/test_audio_io.py -x` | --- W0 | pending |
+| 02-01-02 | 01 | 0 | AIO-02 | unit | `pytest tests/test_samples.py -x` | --- W0 | pending |
+| 02-03-01 | 03 | 0 | AIO-04 | unit | `pytest tests/test_impulse_response.py -x` | --- W0 | pending |
+| 02-02-01 | 02 | 0 | ALG-01 | unit+integration | `pytest tests/test_freeverb.py -x` | --- W0 | pending |
+| 02-02-02 | 02 | 0 | ALG-03 | unit | `pytest tests/test_freeverb.py::test_param_specs -x` | --- W0 | pending |
+| 02-02-03 | 02 | 0 | ALG-04 | unit | `pytest tests/test_freeverb.py::test_registry -x` | --- W0 | pending |
+| 02-02-04 | 02 | 0 | ALG-05 | unit | `pytest tests/test_freeverb.py::test_reset -x` | --- W0 | pending |
+| 02-02-05 | 02 | 0 | ALG-06 | unit | `pytest tests/test_freeverb.py::test_delay_scaling -x` | --- W0 | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
