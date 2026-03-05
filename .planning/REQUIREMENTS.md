@@ -16,13 +16,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### DSP Foundation
 
-- [ ] **DSP-01**: Comb filter primitive with fixed-size circular buffer delay line
-- [ ] **DSP-02**: Allpass filter primitive with fixed-size circular buffer delay line
+- [x] **DSP-01**: Comb filter primitive with fixed-size circular buffer delay line
+- [x] **DSP-02**: Allpass filter primitive with fixed-size circular buffer delay line
 - [x] **DSP-03**: Delay line primitive (circular buffer, no dynamic allocation after init)
 - [ ] **DSP-04**: EQ filter primitives: high-pass, low-pass, notch, bandpass, parametric boost/cut
-- [ ] **DSP-05**: All algorithm state representable as fixed-size C arrays and scalars (no Python objects in hot path)
+- [x] **DSP-05**: All algorithm state representable as fixed-size C arrays and scalars (no Python objects in hot path)
 - [x] **DSP-06**: All audio processed as float32 in [-1.0, 1.0], mono (N,) or stereo (2, N)
-- [ ] **DSP-07**: Block-based processing with BUFFER_SIZE=48 samples internally
+- [x] **DSP-07**: Block-based processing with BUFFER_SIZE=48 samples internally
 
 ### Algorithms
 
