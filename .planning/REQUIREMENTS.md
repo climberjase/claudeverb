@@ -42,10 +42,10 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Analysis
 
 - [ ] **ANLY-01**: Mel spectrogram visualization comparing input vs. processed output (side-by-side or overlay)
-- [ ] **ANLY-02**: RT60 measurement via Schroeder backward integration — broadband plus per-band (low/mid/high)
-- [ ] **ANLY-03**: DRR (Direct-to-Reverberant Ratio) computed from impulse response
-- [ ] **ANLY-04**: C80 and C50 clarity metrics computed from impulse response
-- [ ] **ANLY-05**: Spectral centroid comparison (input vs. output delta)
+- [x] **ANLY-02**: RT60 measurement via Schroeder backward integration — broadband plus per-band (low/mid/high)
+- [x] **ANLY-03**: DRR (Direct-to-Reverberant Ratio) computed from impulse response
+- [x] **ANLY-04**: C80 and C50 clarity metrics computed from impulse response
+- [x] **ANLY-05**: Spectral centroid comparison (input vs. output delta)
 - [ ] **ANLY-06**: FFT magnitude comparison plot (input vs. output overlay) showing reverb coloration
 
 ### Streamlit UI
