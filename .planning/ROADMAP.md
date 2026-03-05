@@ -80,11 +80,11 @@ Plans:
   3. Wet/dry mix slider blends between original and processed audio, audibly ranging from fully dry to fully wet
   4. After processing, spectrogram panels, waveform display, and metric readouts update automatically showing input vs. output comparison
   5. Impulse response can be generated from current algorithm settings and displayed/analyzed
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Processing engine facade (process_audio, wet/dry blend, waveform plot)
+- [ ] 04-02-PLAN.md -- Streamlit web application + human verification
 
 ### Phase 5: Dattorro Plate Algorithm
 **Goal**: The Dattorro Plate reverb is available in the workbench, producing the lush plate sound characteristic of the 1997 paper's figure-eight tank topology
@@ -111,5 +111,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. DSP Foundation | 3/3 | Complete | - |
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
 | 3. Analysis Metrics | 2/2 | Complete   | 2026-03-05 |
-| 4. Engine + Streamlit UI | 0/? | Not started | - |
+| 4. Engine + Streamlit UI | 0/2 | Planning complete | - |
 | 5. Dattorro Plate Algorithm | 0/? | Not started | - |
