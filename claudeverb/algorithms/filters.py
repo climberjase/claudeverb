@@ -109,3 +109,91 @@ class DelayLine:
     def max_delay(self) -> int:
         """Maximum delay in samples."""
         return self._max_delay
+
+
+class CombFilter:
+    """Lowpass-feedback comb filter (Freeverb topology).
+
+    Signal flow: y[n] = x[n] + feedback * lp[n]
+    where lp[n] is a one-pole lowpass of the delay output,
+    and the delay line stores y[n] (the output).
+
+    This produces decaying echoes at multiples of delay_length,
+    with the damp parameter controlling high-frequency rolloff in echoes.
+
+    Args:
+        delay_length: Delay in samples (sets echo interval).
+        feedback: Feedback coefficient controlling decay rate (0..1).
+        damp: Damping coefficient for one-pole lowpass (0=none, 1=full).
+    """
+
+    __slots__ = ("_delay", "_feedback", "_damp1", "_damp2", "_filterstore")
+
+    def __init__(self, delay_length: int, feedback: float = 0.5, damp: float = 0.5) -> None:
+        self._delay = DelayLine(delay_length)
+        self._feedback = np.float32(feedback)
+        self._damp1 = np.float32(1.0 - damp)
+        self._damp2 = np.float32(damp)
+        self._filterstore = np.float32(0.0)
+
+    def process_sample(self, x: float) -> float:
+        """Process a single sample through the comb filter.
+
+        Args:
+            x: Input sample.
+
+        Returns:
+            Filtered output sample as Python float.
+        """
+        delay_out = self._delay.read(self._delay._max_delay)
+        self._filterstore = np.float32(
+            delay_out * self._damp1 + self._filterstore * self._damp2
+        )
+        output = np.float32(x + self._feedback * self._filterstore)
+        self._delay.write(float(output))
+        return float(output)
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        """Process a block of samples through the comb filter.
+
+        Args:
+            block: Input samples, MUST be float32.
+
+        Returns:
+            Filtered output block as float32 ndarray.
+
+        Raises:
+            TypeError: If block is not float32.
+        """
+        if block.dtype != np.float32:
+            raise TypeError(
+                f"CombFilter.process() requires float32 input, got {block.dtype}"
+            )
+        output = np.empty(len(block), dtype=np.float32)
+        for i in range(len(block)):
+            output[i] = self.process_sample(float(block[i]))
+        return output
+
+    def reset(self) -> None:
+        """Reset filter to initial state."""
+        self._delay.reset()
+        self._filterstore = np.float32(0.0)
+
+    @property
+    def feedback(self) -> float:
+        """Feedback coefficient."""
+        return float(self._feedback)
+
+    @feedback.setter
+    def feedback(self, value: float) -> None:
+        self._feedback = np.float32(value)
+
+    @property
+    def damp(self) -> float:
+        """Damping coefficient."""
+        return float(self._damp2)
+
+    @damp.setter
+    def damp(self, value: float) -> None:
+        self._damp1 = np.float32(1.0 - value)
+        self._damp2 = np.float32(value)
