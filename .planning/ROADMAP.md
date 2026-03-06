@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: DSP Foundation** - Core primitives (delay lines, comb/allpass filters, EQ) with C-portability constraints enforced from the start (completed 2026-03-05)
 - [x] **Phase 2: Audio I/O + Freeverb** - First complete audio path: load files, process through Freeverb, output processed audio (completed 2026-03-05)
 - [x] **Phase 3: Analysis Metrics** - Quantitative analysis tools (RT60, DRR, C80, spectrograms, FFT) validated against known analytical results (completed 2026-03-05)
-- [x] **Phase 4: Engine + Streamlit UI** - Process-then-play workflow with full web interface for parameter tweaking, listening, and visual analysis (completed 2026-03-06)
+- [ ] **Phase 4: Engine + Streamlit UI** - Process-then-play workflow with full web interface for parameter tweaking, listening, and visual analysis (gap closure in progress)
 - [ ] **Phase 5: Dattorro Plate Algorithm** - Figure-eight tank reverb with modulated delay lines, the primary target algorithm for guitar pedal deployment
 
 ## Phase Details
@@ -80,11 +80,12 @@ Plans:
   3. Wet/dry mix slider blends between original and processed audio, audibly ranging from fully dry to fully wet
   4. After processing, spectrogram panels, waveform display, and metric readouts update automatically showing input vs. output comparison
   5. Impulse response can be generated from current algorithm settings and displayed/analyzed
-**Plans:** 2/2 plans complete
+**Plans:** 3 plans (2 complete + 1 gap closure)
 
 Plans:
-- [ ] 04-01-PLAN.md -- Processing engine facade (process_audio, wet/dry blend, waveform plot)
-- [ ] 04-02-PLAN.md -- Streamlit web application + human verification
+- [x] 04-01-PLAN.md -- Processing engine facade (process_audio, wet/dry blend, waveform plot)
+- [x] 04-02-PLAN.md -- Streamlit web application + human verification
+- [ ] 04-03-PLAN.md -- Gap closure: add loop=True to st.audio calls (AIO-03)
 
 ### Phase 5: Dattorro Plate Algorithm
 **Goal**: The Dattorro Plate reverb is available in the workbench, producing the lush plate sound characteristic of the 1997 paper's figure-eight tank topology
@@ -111,5 +112,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. DSP Foundation | 3/3 | Complete | - |
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
 | 3. Analysis Metrics | 2/2 | Complete   | 2026-03-05 |
-| 4. Engine + Streamlit UI | 2/2 | Complete   | 2026-03-06 |
+| 4. Engine + Streamlit UI | 2/3 | Gap closure in progress | - |
 | 5. Dattorro Plate Algorithm | 0/? | Not started | - |
