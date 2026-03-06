@@ -96,10 +96,11 @@ Plans:
   2. Plate reverb produces audibly distinct character from Freeverb -- lusher, more diffuse tail visible in spectrogram
   3. Impulse response shows the expected frequency smearing from tank modulation (not a static comb pattern)
   4. All parameter positions produce stable output with no DC offset accumulation, runaway feedback, or artifacts
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md -- Dattorro Plate algorithm (TDD: figure-eight tank, 14 test cases)
+- [ ] 05-02-PLAN.md -- Output calibration + human audio quality verification
 
 ## Progress
 
@@ -113,4 +114,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
 | 3. Analysis Metrics | 2/2 | Complete   | 2026-03-05 |
 | 4. Engine + Streamlit UI | 2/3 | Gap closure in progress | - |
-| 5. Dattorro Plate Algorithm | 0/? | Not started | - |
+| 5. Dattorro Plate Algorithm | 0/2 | Not started | - |
