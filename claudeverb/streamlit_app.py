@@ -20,24 +20,6 @@ from claudeverb.audio.samples import get_sample, list_samples
 from claudeverb.config import SAMPLE_RATE
 from claudeverb import engine
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _prepare_for_playback(audio: np.ndarray) -> np.ndarray:
-    """Transpose channels-first stereo (2, N) to channels-last (N, 2) for st.audio.
-
-    Streamlit's ``st.audio()`` expects mono ``(N,)`` or stereo ``(N, channels)``
-    (channels-last), but claudeverb uses ``(2, N)`` (channels-first).  Passing
-    the wrong layout causes garbled/distorted playback in the browser.
-    """
-    if audio.ndim == 2 and audio.shape[0] == 2:
-        audio = audio.T  # (2, N) -> (N, 2)
-    return audio.astype(np.float32)
-
-
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -85,22 +67,6 @@ with st.sidebar:
 
     # -- Algorithm --
     algo_name = st.selectbox("Algorithm", list(ALGORITHM_REGISTRY.keys()))
-
-    # Track current algorithm -- clear stale widget keys on switch
-    st.session_state.setdefault("current_algo", algo_name)
-    if st.session_state.get("current_algo") != algo_name:
-        # Algorithm changed: remove all knob_*/switch_* keys from previous algo
-        stale_keys = [
-            k for k in list(st.session_state.keys())
-            if k.startswith("knob_") or k.startswith("switch_")
-        ]
-        for k in stale_keys:
-            del st.session_state[k]
-        # Clear processed results tied to previous algorithm
-        for k in ["results", "dry_audio", "wet_audio"]:
-            st.session_state[k] = None
-        st.session_state["current_algo"] = algo_name
-        st.rerun()
 
     # Instantiate to read param_specs
     algo_cls = ALGORITHM_REGISTRY[algo_name]
@@ -164,8 +130,6 @@ if reset_clicked:
                 del st.session_state[key]
     if "wet_dry" in st.session_state:
         del st.session_state["wet_dry"]
-    if "current_algo" in st.session_state:
-        del st.session_state["current_algo"]
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -210,12 +174,12 @@ if st.session_state["results"] is not None:
 
     with col_in:
         st.markdown("**Input**")
-        st.audio(_prepare_for_playback(dry), sample_rate=SAMPLE_RATE, loop=True)
+        st.audio(dry, sample_rate=SAMPLE_RATE, loop=True)
 
     with col_out:
         st.markdown("**Output**")
         blended = engine.blend_wet_dry(dry, wet, wet_dry_value)
-        st.audio(_prepare_for_playback(blended), sample_rate=SAMPLE_RATE, loop=True)
+        st.audio(blended, sample_rate=SAMPLE_RATE, loop=True)
 
         # Download button for processed audio
         buf = io.BytesIO()
@@ -278,7 +242,7 @@ if st.session_state["results"] is not None:
     # -- Impulse Response --
     st.subheader("Impulse Response")
     ir = results["ir"]
-    st.audio(_prepare_for_playback(ir), sample_rate=SAMPLE_RATE, loop=True)
+    st.audio(ir, sample_rate=SAMPLE_RATE, loop=True)
 
     # Small IR waveform plot
     fig_ir, ax_ir = plt.subplots(figsize=(10, 1.5))
