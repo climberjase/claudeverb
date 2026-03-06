@@ -144,7 +144,7 @@ MAX_MOD_EXCURSION = 16
 SHIMMER_BLEND = 0.2
 
 # Output gain scaling
-OUTPUT_GAIN = 0.6
+OUTPUT_GAIN = 1.5
 
 
 # ---------------------------------------------------------------------------
