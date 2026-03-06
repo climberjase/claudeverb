@@ -174,12 +174,12 @@ if st.session_state["results"] is not None:
 
     with col_in:
         st.markdown("**Input**")
-        st.audio(dry, sample_rate=SAMPLE_RATE)
+        st.audio(dry, sample_rate=SAMPLE_RATE, loop=True)
 
     with col_out:
         st.markdown("**Output**")
         blended = engine.blend_wet_dry(dry, wet, wet_dry_value)
-        st.audio(blended, sample_rate=SAMPLE_RATE)
+        st.audio(blended, sample_rate=SAMPLE_RATE, loop=True)
 
         # Download button for processed audio
         buf = io.BytesIO()
@@ -242,7 +242,7 @@ if st.session_state["results"] is not None:
     # -- Impulse Response --
     st.subheader("Impulse Response")
     ir = results["ir"]
-    st.audio(ir, sample_rate=SAMPLE_RATE)
+    st.audio(ir, sample_rate=SAMPLE_RATE, loop=True)
 
     # Small IR waveform plot
     fig_ir, ax_ir = plt.subplots(figsize=(10, 1.5))
