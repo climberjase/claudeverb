@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Algorithms
 
 - [x] **ALG-01**: Freeverb algorithm (Jezar's Schroeder-Moorer: 8 comb + 4 allpass per channel) with 6 knobs and 2 switches
-- [ ] **ALG-02**: Dattorro Plate reverb algorithm (figure-eight tank topology) with 6 knobs and 2 switches
+- [x] **ALG-02**: Dattorro Plate reverb algorithm (figure-eight tank topology) with 6 knobs and 2 switches
 - [x] **ALG-03**: Each algorithm exposes param_specs defining knob ranges (0-100) and switch positions (-1, 0, 1)
 - [x] **ALG-04**: Algorithm registry with dropdown selection in UI
 - [x] **ALG-05**: Algorithm reset clears all internal state (delay lines, filter state) between parameter changes
