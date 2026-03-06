@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **AIO-01**: User can load audio files from disk (WAV/AIFF) with automatic resampling to 48 kHz
 - [x] **AIO-02**: Workbench ships with bundled test samples (dry drums, guitar, vocals, impulse click)
-- [ ] **AIO-03**: User can play, stop, and loop processed audio output
+- [x] **AIO-03**: User can play, stop, and loop processed audio output
 - [x] **AIO-04**: User can generate an impulse response from any algorithm with current parameters
 
 ### DSP Foundation
@@ -50,11 +50,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Streamlit UI
 
-- [ ] **UI-01**: Streamlit web interface tying all controls and displays together
-- [ ] **UI-02**: Algorithm selector dropdown populated from registry
-- [ ] **UI-03**: Knob controls (6 sliders 0-100) and switch controls (2 three-position selectors) auto-generated from param_specs
-- [ ] **UI-04**: Process button triggering algorithm execution on loaded audio
-- [ ] **UI-05**: Analysis displays update after each process run (spectrograms, metrics, waveforms)
+- [x] **UI-01**: Streamlit web interface tying all controls and displays together
+- [x] **UI-02**: Algorithm selector dropdown populated from registry
+- [x] **UI-03**: Knob controls (6 sliders 0-100) and switch controls (2 three-position selectors) auto-generated from param_specs
+- [x] **UI-04**: Process button triggering algorithm execution on loaded audio
+- [x] **UI-05**: Analysis displays update after each process run (spectrograms, metrics, waveforms)
 
 ## v2 Requirements
 
