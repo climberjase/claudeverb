@@ -147,7 +147,7 @@ def plot_waveform_comparison(
     dry_mono = _ensure_mono(dry)
     wet_mono = _ensure_mono(wet)
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(10, 3.5), sharex=True)
 
     t_dry = np.arange(len(dry_mono)) / sr
     t_wet = np.arange(len(wet_mono)) / sr

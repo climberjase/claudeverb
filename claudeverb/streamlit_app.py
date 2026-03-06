@@ -198,19 +198,19 @@ if st.session_state["results"] is not None:
     # -- Waveform --
     st.subheader("Waveform Comparison")
     fig_waveform = engine.plot_waveform_comparison(dry, wet)
-    st.pyplot(fig_waveform)
+    st.pyplot(fig_waveform, use_container_width=False)
     plt.close(fig_waveform)
 
     # -- Spectrograms --
     st.subheader("Mel Spectrogram Comparison")
     fig_mel = results["figures"]["mel"]
-    st.pyplot(fig_mel)
+    st.pyplot(fig_mel, use_container_width=False)
     plt.close(fig_mel)
 
     # -- FFT Overlay --
     st.subheader("FFT Overlay")
     fig_fft = results["figures"]["fft"]
-    st.pyplot(fig_fft)
+    st.pyplot(fig_fft, use_container_width=False)
     plt.close(fig_fft)
 
     # -- Metrics --
@@ -245,12 +245,12 @@ if st.session_state["results"] is not None:
     st.audio(ir, sample_rate=SAMPLE_RATE)
 
     # Small IR waveform plot
-    fig_ir, ax_ir = plt.subplots(figsize=(12, 2))
+    fig_ir, ax_ir = plt.subplots(figsize=(10, 1.5))
     t_ir = np.arange(len(ir)) / SAMPLE_RATE
     ax_ir.plot(t_ir, ir, linewidth=0.5)
     ax_ir.set_xlabel("Time (s)")
     ax_ir.set_ylabel("Amplitude")
     ax_ir.set_title("Impulse Response")
     fig_ir.tight_layout()
-    st.pyplot(fig_ir)
+    st.pyplot(fig_ir, use_container_width=False)
     plt.close(fig_ir)

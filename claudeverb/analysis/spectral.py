@@ -49,7 +49,7 @@ def plot_mel_comparison(
     inp = _ensure_mono(input_audio).astype(np.float32)
     out = _ensure_mono(output_audio).astype(np.float32)
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3), sharey=True)
 
     for ax, audio, title in zip(axes, [inp, out], ["Input", "Output"]):
         S = librosa.feature.melspectrogram(
@@ -85,7 +85,7 @@ def plot_fft_comparison(
     inp = _ensure_mono(input_audio).astype(np.float32)
     out = _ensure_mono(output_audio).astype(np.float32)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 3))
 
     for audio, label, alpha in [(inp, "Input", 0.8), (out, "Output", 0.7)]:
         spectrum = np.abs(np.fft.rfft(audio))
