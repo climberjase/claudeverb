@@ -34,6 +34,21 @@ for key in ["dry_audio", "wet_audio", "results", "audio_loaded"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
+
+def _audio_to_wav_bytes(audio: np.ndarray) -> bytes:
+    """Encode audio to WAV bytes preserving true levels.
+
+    Streamlit's built-in numpy handling normalizes to peak, which makes
+    everything sound louder than it really is.  By pre-encoding to 16-bit
+    WAV via soundfile we bypass that normalization.
+    """
+    buf = io.BytesIO()
+    if audio.ndim == 2 and audio.shape[0] == 2:
+        sf.write(buf, audio.T, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+    else:
+        sf.write(buf, audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -67,6 +82,17 @@ with st.sidebar:
 
     # -- Algorithm --
     algo_name = st.selectbox("Algorithm", list(ALGORITHM_REGISTRY.keys()))
+
+    # Clear stale widget keys when the user switches algorithms
+    if st.session_state.get("current_algo") is not None and st.session_state["current_algo"] != algo_name:
+        for k in list(st.session_state.keys()):
+            if k.startswith("knob_") or k.startswith("switch_"):
+                del st.session_state[k]
+        for k in ["results", "dry_audio", "wet_audio"]:
+            st.session_state[k] = None
+        st.session_state["current_algo"] = algo_name
+        st.rerun()
+    st.session_state.setdefault("current_algo", algo_name)
 
     # Instantiate to read param_specs
     algo_cls = ALGORITHM_REGISTRY[algo_name]
@@ -130,6 +156,8 @@ if reset_clicked:
                 del st.session_state[key]
     if "wet_dry" in st.session_state:
         del st.session_state["wet_dry"]
+    if "current_algo" in st.session_state:
+        del st.session_state["current_algo"]
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -174,23 +202,17 @@ if st.session_state["results"] is not None:
 
     with col_in:
         st.markdown("**Input**")
-        st.audio(dry, sample_rate=SAMPLE_RATE, loop=True)
+        st.audio(_audio_to_wav_bytes(dry), format="audio/wav", loop=True)
 
     with col_out:
         st.markdown("**Output**")
         blended = engine.blend_wet_dry(dry, wet, wet_dry_value)
-        st.audio(blended, sample_rate=SAMPLE_RATE, loop=True)
+        st.audio(_audio_to_wav_bytes(blended), format="audio/wav", loop=True)
 
         # Download button for processed audio
-        buf = io.BytesIO()
-        # soundfile expects (N,) mono or (N, 2) stereo
-        if blended.ndim == 2 and blended.shape[0] == 2:
-            sf.write(buf, blended.T, SAMPLE_RATE, format="WAV")
-        else:
-            sf.write(buf, blended, SAMPLE_RATE, format="WAV")
         st.download_button(
             "Download WAV",
-            buf.getvalue(),
+            _audio_to_wav_bytes(blended),
             "processed.wav",
             "audio/wav",
         )
@@ -242,7 +264,7 @@ if st.session_state["results"] is not None:
     # -- Impulse Response --
     st.subheader("Impulse Response")
     ir = results["ir"]
-    st.audio(ir, sample_rate=SAMPLE_RATE, loop=True)
+    st.audio(_audio_to_wav_bytes(ir), format="audio/wav", loop=True)
 
     # Small IR waveform plot
     fig_ir, ax_ir = plt.subplots(figsize=(10, 1.5))
