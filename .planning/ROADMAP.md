@@ -99,8 +99,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md -- Dattorro Plate algorithm (TDD: figure-eight tank, 14 test cases)
-- [ ] 05-02-PLAN.md -- Output calibration + human audio quality verification
+- [x] 05-01-PLAN.md -- Dattorro Plate algorithm (TDD: figure-eight tank, 14 test cases)
+- [x] 05-02-PLAN.md -- Output calibration + human audio quality verification (verified-with-issues: UI bugs, audio playback quality)
 
 ## Progress
 
@@ -114,4 +114,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Audio I/O + Freeverb | 3/3 | Complete   | 2026-03-05 |
 | 3. Analysis Metrics | 2/2 | Complete   | 2026-03-05 |
 | 4. Engine + Streamlit UI | 2/3 | Gap closure in progress | - |
-| 5. Dattorro Plate Algorithm | 0/2 | Not started | - |
+| 5. Dattorro Plate Algorithm | 2/2 | Verified-with-issues (UI bugs, audio quality) | 2026-03-06 |
