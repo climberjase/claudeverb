@@ -61,7 +61,7 @@ def test_delay_scaling():
 
     # Input AP lengths at 29761: [142, 107, 379, 277]
     # Expected at 48000: round(length * 48000 / 29761)
-    expected = [229, 173, 612, 447]
+    expected = [229, 173, 611, 447]
     for orig, exp in zip([142, 107, 379, 277], expected):
         assert DattorroPlate._scale_length(orig) == exp
 
@@ -182,25 +182,31 @@ def test_freeze_mode():
 
 def test_shimmer_mode():
     """Shimmer mode produces more high-frequency content than normal."""
+    n = 96000  # 2 seconds to let shimmer build in feedback loop
+
     # Normal mode
     plate_normal = ALGORITHM_REGISTRY["dattorro_plate"]()
-    plate_normal.update_params({"decay": 70, "mod_depth": 0})
-    impulse = np.zeros(48000, dtype=np.float32)
+    plate_normal.update_params({"decay": 85, "mod_depth": 0, "tank_damping": 0})
+    impulse = np.zeros(n, dtype=np.float32)
     impulse[0] = 1.0
     out_normal = plate_normal.process(impulse)
 
     # Shimmer mode
     plate_shimmer = ALGORITHM_REGISTRY["dattorro_plate"]()
-    plate_shimmer.update_params({"decay": 70, "mod_depth": 0, "switch1": 1})
+    plate_shimmer.update_params({"decay": 85, "mod_depth": 0, "tank_damping": 0,
+                                  "switch1": 1})
     out_shimmer = plate_shimmer.process(impulse.copy())
 
-    # Compare high-frequency energy (upper half of spectrum)
+    # Compare high-frequency energy (upper quarter of spectrum)
+    # Use the tail portion where shimmer has had time to build up
     for ch in range(2):
-        fft_normal = np.abs(np.fft.rfft(out_normal[ch]))
-        fft_shimmer = np.abs(np.fft.rfft(out_shimmer[ch]))
-        mid = len(fft_normal) // 2
-        hf_normal = np.sum(fft_normal[mid:])
-        hf_shimmer = np.sum(fft_shimmer[mid:])
+        tail_normal = out_normal[ch, n // 2:]
+        tail_shimmer = out_shimmer[ch, n // 2:]
+        fft_normal = np.abs(np.fft.rfft(tail_normal))
+        fft_shimmer = np.abs(np.fft.rfft(tail_shimmer))
+        quarter = len(fft_normal) * 3 // 4
+        hf_normal = np.sum(fft_normal[quarter:])
+        hf_shimmer = np.sum(fft_shimmer[quarter:])
         assert hf_shimmer > hf_normal, \
             f"Shimmer should have more HF energy (ch{ch}: normal={hf_normal:.4f}, shimmer={hf_shimmer:.4f})"
 
