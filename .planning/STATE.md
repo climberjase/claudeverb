@@ -1,36 +1,37 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: ClaudeVerb DSP Workbench
+milestone: v1.1
+milestone_name: Algorithms, Real-Time & C Export
 current_plan: Not started
-status: milestone_complete
-stopped_at: v1.0 milestone archived
-last_updated: "2026-03-06T09:45:00.000Z"
+status: defining_requirements
+stopped_at: Milestone v1.1 started
+last_updated: "2026-03-07T00:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
-**Last session:** 2026-03-06
-**Stopped at:** v1.0 milestone archived
+**Last session:** 2026-03-07
+**Stopped at:** Milestone v1.1 started
 **Resume file:** None
 
 ## Current Position
 
-- **Phase:** All v1.0 phases complete
-- **Current Plan:** None — milestone archived
-- **Status:** v1.0 shipped, awaiting next milestone
+- **Phase:** Not started (defining requirements)
+- **Current Plan:** —
+- **Status:** Defining requirements
+- **Last activity:** 2026-03-07 — Milestone v1.1 started
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-06)
+See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** A developer can hear and visually analyze reverb algorithm output, tweak parameters, and iterate rapidly — ears and metrics together.
-**Current focus:** Planning next milestone
+**Current focus:** v1.1 — Algorithms, Real-Time & C Export
 
 ## Accumulated Context
 

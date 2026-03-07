@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Python DSP workbench for developing, testing, and tuning algorithmic reverb effects at 48 kHz. Users load audio samples, apply reverb algorithms (Freeverb, Dattorro Plate) with tweakable parameters (6 knobs 0–100, 2 three-position switches), listen to results via Streamlit web UI, and evaluate them with acoustic analysis (RT60, DRR, C80/C50, spectrograms, FFT). Algorithms are designed to be portable to C for the STM32 Daisy Seed embedded audio platform.
+A Python DSP workbench for developing, testing, and tuning algorithmic reverb effects at 48 kHz. Users load audio samples, apply reverb algorithms (Freeverb, Dattorro Plate, Dattorro variants, FDN, Room, Chamber) with tweakable parameters, listen to results in real-time or process-then-play via Streamlit web UI, evaluate with acoustic analysis (RT60, DRR, C80/C50, spectrograms, FFT), and export working C code for the STM32 Daisy Seed embedded audio platform.
 
 ## Core Value
 
@@ -28,18 +28,42 @@ A developer can hear and visually analyze the output of a reverb algorithm appli
 - ✓ All algorithms use fixed-size delay lines (circular buffers), no dynamic allocation after init — v1.0
 - ✓ All algorithm state representable as C structs (portability constraint) — v1.0
 
+## Current Milestone: v1.1 Algorithms, Real-Time & C Export
+
+**Goal:** Expand the algorithm library (Dattorro variants, FDN, Room, Chamber), add real-time playback with live knob tweaking, EQ on reverb trails, working C code export to Daisy Seed, and signal-flow diagram visualization.
+
+**Target features:**
+- Dattorro parameter variants (modulation, pre-delay, bandwidth, damping, tank size) and topology variants (loops, taps, diffusion blocks)
+- FDN-based reverb algorithm (independent implementation)
+- Room reverb algorithms (small room, large room — new algorithms)
+- Chamber reverb algorithm (new algorithm)
+- Biquad EQ on reverb trails with UI controls
+- Real-time playback of loaded WAV files with live knob tweaking
+- Multi-file loading (4-5 files switchable), loop/single-shot toggle
+- Silence padding for reverb tail preservation
+- C code export via UI button to /daisyexport with current settings as defaults
+- Signal-flow diagrams rendered in UI for all algorithms
+
 ### Active
 
-(Define in next milestone)
+- Dattorro parameter variants and topology variants
+- FDN reverb algorithm
+- Room reverb algorithms (small/large)
+- Chamber reverb algorithm
+- Biquad EQ on reverb trails
+- Real-time playback with live knob tweaking
+- Multi-file loading with loop/single-shot toggle
+- Silence padding for reverb tails
+- C code export to Daisy Seed via UI
+- Signal-flow diagram visualization
 
 ### Out of Scope
 
 - AU plugin loading — deferred to future milestone, focus on own algorithms first
-- C code export to Daisy Seed — v2 milestone after Python workbench is solid
-- Real-time audio processing with live knob tweaking — add after process-then-play works
 - PySide6 desktop UI — start with Streamlit, add native UI in later milestone
 - Convolution reverbs — workbench is exclusively for algorithmic reverbs
-- FDN / Schroeder / Neunaber algorithms — future additions after Freeverb and Plate are solid
+- Schroeder / Neunaber algorithms — future additions
+- Live microphone/instrument input — v1.1 real-time is playback of loaded files only
 
 ## Context
 
@@ -73,4 +97,4 @@ A developer can hear and visually analyze the output of a reverb algorithm appli
 | Force algorithm mix to 100 internally | UI wet/dry controls full blend range without algorithm interaction | ✓ Good — clean separation of wet/dry from algorithm params |
 
 ---
-*Last updated: 2026-03-06 after v1.0 milestone*
+*Last updated: 2026-03-07 after v1.1 milestone start*
