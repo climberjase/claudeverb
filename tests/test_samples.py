@@ -154,3 +154,54 @@ class TestSampleRegistry:
         """ValueError for unknown sample name."""
         with pytest.raises(ValueError, match="Unknown sample"):
             get_sample("nonexistent_sample")
+
+
+class TestWavDiscovery:
+    """Tests for WAV file discovery and loading (06-02)."""
+
+    def test_list_wav_samples_non_empty(self):
+        """list_wav_samples() returns a non-empty list (WAV files exist)."""
+        from claudeverb.audio.samples import list_wav_samples
+
+        wavs = list_wav_samples()
+        assert len(wavs) > 0
+
+    def test_list_wav_samples_returns_stems(self):
+        """list_wav_samples() returns stems without .wav extension."""
+        from claudeverb.audio.samples import list_wav_samples
+
+        for name in list_wav_samples():
+            assert not name.endswith(".wav"), f"'{name}' still has .wav extension"
+
+    def test_list_all_samples_includes_both(self):
+        """list_all_samples() returns both synthesized and WAV samples."""
+        from claudeverb.audio.samples import list_all_samples
+
+        all_names = list_all_samples()
+        # Should have synthesized samples
+        assert any("[WAV]" not in n for n in all_names), "No synthesized samples"
+        # Should have WAV samples
+        assert any("[WAV]" in n for n in all_names), "No WAV samples"
+
+    def test_wav_entries_have_label(self):
+        """WAV entries in list_all_samples() include '[WAV]' label."""
+        from claudeverb.audio.samples import list_all_samples, list_wav_samples
+
+        all_names = list_all_samples()
+        wav_stems = list_wav_samples()
+        for stem in wav_stems:
+            assert f"{stem} [WAV]" in all_names, \
+                f"WAV sample '{stem}' missing [WAV] label in list_all_samples()"
+
+    def test_get_sample_wav_returns_float32(self):
+        """get_sample('audio1-acoustic [WAV]') returns float32 ndarray."""
+        result = get_sample("audio1-acoustic [WAV]")
+        assert isinstance(result, np.ndarray)
+        assert result.dtype == np.float32
+        assert len(result) > 0
+
+    def test_get_sample_synthesized_still_works(self):
+        """get_sample('guitar') still works for synthesized samples."""
+        result = get_sample("guitar")
+        assert isinstance(result, np.ndarray)
+        assert result.dtype == np.float32
