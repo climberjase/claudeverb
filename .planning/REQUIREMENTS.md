@@ -1,7 +1,7 @@
 # Requirements: ClaudeVerb
 
 **Defined:** 2026-03-07
-**Core Value:** A developer can hear and visually analyze reverb algorithm output, tweak parameters, and iterate rapidly — ears and metrics together.
+**Core Value:** A developer can hear and visually analyze reverb algorithm output, tweak parameters, and iterate rapidly -- ears and metrics together.
 
 ## v1.1 Requirements
 
@@ -68,7 +68,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 |---------|--------|
 | AU plugin loading | Focus on own algorithms first |
 | PySide6 desktop UI | Streamlit sufficient for workbench |
-| Convolution reverbs | Algorithmic reverbs only — C portability constraint |
+| Convolution reverbs | Algorithmic reverbs only -- C portability constraint |
 | Live microphone/instrument input | v1.1 real-time is playback of loaded files only |
 | Visual node-based algorithm designer | Enormous UI scope, beyond workbench purpose |
 | Automated flashing to Daisy Seed | Platform-specific toolchain, user compiles manually |
@@ -80,32 +80,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ALGO-01 | — | Pending |
-| ALGO-02 | — | Pending |
-| ALGO-03 | — | Pending |
-| ALGO-04 | — | Pending |
-| ALGO-05 | — | Pending |
-| ALGO-06 | — | Pending |
-| ALGO-07 | — | Pending |
-| ALGO-08 | — | Pending |
-| EQ-01 | — | Pending |
-| EQ-02 | — | Pending |
-| PLAY-01 | — | Pending |
-| PLAY-02 | — | Pending |
-| PLAY-03 | — | Pending |
-| PLAY-04 | — | Pending |
-| PLAY-05 | — | Pending |
-| VIZ-01 | — | Pending |
-| EXP-01 | — | Pending |
-| EXP-02 | — | Pending |
-| EXP-03 | — | Pending |
-| EXP-04 | — | Pending |
+| ALGO-01 | Phase 7 | Pending |
+| ALGO-02 | Phase 8 | Pending |
+| ALGO-03 | Phase 8 | Pending |
+| ALGO-04 | Phase 8 | Pending |
+| ALGO-05 | Phase 6 | Pending |
+| ALGO-06 | Phase 8 | Pending |
+| ALGO-07 | Phase 8 | Pending |
+| ALGO-08 | Phase 8 | Pending |
+| EQ-01 | Phase 6 | Pending |
+| EQ-02 | Phase 6 | Pending |
+| PLAY-01 | Phase 6 | Pending |
+| PLAY-02 | Phase 6 | Pending |
+| PLAY-03 | Phase 6 | Pending |
+| PLAY-04 | Phase 10 | Pending |
+| PLAY-05 | Phase 10 | Pending |
+| VIZ-01 | Phase 9 | Pending |
+| EXP-01 | Phase 9 | Pending |
+| EXP-02 | Phase 9 | Pending |
+| EXP-03 | Phase 9 | Pending |
+| EXP-04 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-07*
-*Last updated: 2026-03-07 after initial definition*
+*Last updated: 2026-03-08 after roadmap creation*
