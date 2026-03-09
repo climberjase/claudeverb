@@ -39,7 +39,7 @@ def stereo_audio(mono_audio):
 class TestProcessAudio:
     def test_returns_expected_keys(self, mono_audio):
         result = process_audio("freeverb", {}, mono_audio)
-        assert set(result.keys()) == {"dry", "wet", "ir", "metrics", "figures"}
+        assert set(result.keys()) == {"dry", "wet", "ir", "metrics", "figures", "original_length"}
 
     def test_wet_is_different_from_dry(self, mono_audio):
         result = process_audio("freeverb", {}, mono_audio)

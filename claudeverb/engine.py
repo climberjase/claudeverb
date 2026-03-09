@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from claudeverb.algorithms import ALGORITHM_REGISTRY
+from claudeverb.algorithms.filters import Biquad
 from claudeverb.analysis.metrics import (
     compute_clarity,
     compute_drr,
@@ -52,8 +53,47 @@ def pad_with_silence(
         return np.concatenate([audio, padding], axis=1)
 
 
+def apply_eq(wet: np.ndarray, eq_params: dict) -> np.ndarray:
+    """Apply 3-band EQ (low shelf, mid parametric, high shelf) to audio.
+
+    Args:
+        wet: Audio signal, mono (N,) or stereo (2, N), float32.
+        eq_params: Dict with keys: low_freq, low_gain, mid_freq, mid_gain,
+                   mid_q, high_freq, high_gain.
+
+    Returns:
+        EQ-processed audio, clipped to [-1, 1], float32.
+    """
+    low = Biquad.low_shelf(eq_params["low_freq"], eq_params["low_gain"],
+                           sample_rate=SAMPLE_RATE)
+    mid = Biquad.parametric(eq_params["mid_freq"], eq_params["mid_q"],
+                            eq_params["mid_gain"], sample_rate=SAMPLE_RATE)
+    high = Biquad.high_shelf(eq_params["high_freq"], eq_params["high_gain"],
+                             sample_rate=SAMPLE_RATE)
+
+    if wet.ndim == 1:
+        result = high.process(mid.process(low.process(wet)))
+    else:
+        result = wet.copy()
+        for ch in range(wet.shape[0]):
+            low.reset()
+            mid.reset()
+            high.reset()
+            channel = wet[ch].copy()
+            channel = low.process(channel)
+            channel = mid.process(channel)
+            channel = high.process(channel)
+            result[ch] = channel
+
+    return np.clip(result, -1.0, 1.0).astype(np.float32)
+
+
 def process_audio(
-    algorithm_name: str, params: dict, audio: np.ndarray
+    algorithm_name: str,
+    params: dict,
+    audio: np.ndarray,
+    silence_seconds: float = 0.0,
+    eq_params: dict | None = None,
 ) -> dict:
     """Run a reverb algorithm and return results for UI consumption.
 
@@ -65,18 +105,32 @@ def process_audio(
         algorithm_name: Key in ALGORITHM_REGISTRY (e.g. "freeverb").
         params: Algorithm parameter dict (mix is overridden to 100).
         audio: Input audio, mono (N,) or stereo (2, N), float32.
+        silence_seconds: Duration of silence to append to input for reverb
+            tail preservation (default 0.0, no padding).
+        eq_params: Optional EQ settings dict. If provided and
+            ``eq_params["enabled"]`` is truthy, a 3-band EQ chain is applied
+            to the wet signal. Keys: low_freq, low_gain, mid_freq, mid_gain,
+            mid_q, high_freq, high_gain, enabled.
 
     Returns:
         Dict with keys:
-            dry     -- original audio (np.ndarray)
-            wet     -- processed audio (np.ndarray)
-            ir      -- impulse response (np.ndarray)
-            metrics -- dict of str -> str (formatted metric values)
-            figures -- dict of str -> matplotlib.figure.Figure
+            dry             -- (possibly padded) input audio (np.ndarray)
+            wet             -- processed audio (np.ndarray)
+            ir              -- impulse response (np.ndarray)
+            metrics         -- dict of str -> str (formatted metric values)
+            figures         -- dict of str -> matplotlib.figure.Figure
+            original_length -- length of audio before silence padding (int)
 
     Raises:
         KeyError: If algorithm_name is not in ALGORITHM_REGISTRY.
     """
+    # Record pre-padding length for UI waveform boundary markers
+    original_length = audio.shape[-1] if audio.ndim == 2 else len(audio)
+
+    # Silence padding stage
+    if silence_seconds > 0:
+        audio = pad_with_silence(audio, silence_seconds)
+
     # Look up and instantiate algorithm
     algo_cls = ALGORITHM_REGISTRY[algorithm_name]
     algo = algo_cls()
@@ -89,6 +143,10 @@ def process_audio(
     algo.update_params(forced_params)
     algo.reset()
     wet = algo.process(audio.copy())
+
+    # EQ stage: apply 3-band EQ to wet signal if enabled
+    if eq_params and eq_params.get("enabled"):
+        wet = apply_eq(wet, eq_params)
 
     # Generate impulse response (reset state first since process() consumed it)
     algo.update_params(forced_params)
@@ -126,6 +184,7 @@ def process_audio(
         "ir": ir,
         "metrics": metrics,
         "figures": figures,
+        "original_length": original_length,
     }
 
 
