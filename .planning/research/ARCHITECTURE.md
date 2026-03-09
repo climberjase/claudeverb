@@ -1,358 +1,526 @@
 # Architecture Patterns
 
-**Domain:** DSP reverb algorithm development workbench
-**Researched:** 2026-03-04
+**Domain:** DSP reverb workbench -- v1.1 feature integration
+**Researched:** 2026-03-07
 
-## Recommended Architecture
+## Existing Architecture Snapshot
 
-ClaudeVerb is a layered workbench with strict unidirectional data flow. The architecture separates concerns into five layers: UI, orchestration, DSP algorithms, analysis, and audio I/O. The critical architectural constraint is **C portability** -- every DSP component must map to fixed-size C structs and stateless processing functions.
+Before defining integration points, here is the current system structure as built in v1.0:
 
 ```
-+-------------------+
-|   Streamlit UI    |  Layer 5: Presentation
-|  (panels/widgets) |
-+--------+----------+
-         |
-+--------v----------+
-|   Session/Engine   |  Layer 4: Orchestration
-| (pipeline runner)  |
-+--+------+------+--+
-   |      |      |
-+--v--+ +-v--+ +-v--------+
-| DSP | |I/O | | Analysis |  Layers 1-3: Core
-+-----+ +----+ +----------+
+claudeverb/
+  config.py              -- SAMPLE_RATE=48000, BUFFER_SIZE=48
+  engine.py              -- Facade: process_audio(), blend_wet_dry(), plot_waveform_comparison()
+  streamlit_app.py       -- UI layer (sidebar params, main area results)
+  algorithms/
+    base.py              -- ReverbAlgorithm ABC (_initialize, _process_impl, reset, update_params, param_specs)
+    filters.py           -- DelayLine, CombFilter, AllpassFilter, Biquad (5 factory methods)
+    freeverb.py          -- 8 combs + 4 allpass per channel, stereo spread
+    dattorro_plate.py    -- Figure-eight tank, OnePole, DCBlocker, LFO modulation
+    __init__.py          -- ALGORITHM_REGISTRY dict
+  audio/
+    io.py                -- load/save with 48 kHz resample
+    samples.py           -- Bundled sample discovery
+    impulse.py           -- IR generation via unit impulse
+    __init__.py
+  analysis/
+    metrics.py           -- RT60, DRR, C80/C50, spectral centroid delta
+    spectral.py          -- Mel spectrogram, FFT comparison plots
+    __init__.py
+```
+
+**Established patterns carried forward unchanged:**
+- Registry-based algorithm discovery (dict in `algorithms/__init__.py`)
+- ABC with `param_specs` property driving auto-generated UI controls (knobs 0-100, switches -1/0/1)
+- Engine facade decouples DSP from Streamlit -- UI never calls algorithm methods directly
+- All DSP primitives use `__slots__`, float32, sample-by-sample `process_sample()` + block `process()`
+- C portability: fixed-size delay lines, no dynamic alloc after `_initialize()`
+- Process-then-play workflow via `st.audio()` with pre-encoded WAV bytes
+
+## Recommended Architecture for v1.1
+
+### Component Map: New vs Modified
+
+```
+NEW COMPONENTS:
+  claudeverb/
+    algorithms/
+      dattorro_variants.py   -- NEW: Dattorro parameter/topology variants
+      fdn_reverb.py          -- NEW: Feedback Delay Network reverb
+      room_reverb.py         -- NEW: Small/large room algorithms
+      chamber_reverb.py      -- NEW: Chamber reverb algorithm
+    audio/
+      realtime.py            -- NEW: Real-time playback engine (sounddevice callback thread)
+      padding.py             -- NEW: Silence padding for reverb tail capture
+    export/
+      __init__.py            -- NEW
+      c_codegen.py           -- NEW: C struct/process code generation
+      templates/             -- NEW: C code template strings or files
+    diagrams/
+      __init__.py            -- NEW
+      signal_flow.py         -- NEW: Algorithm signal-flow diagram rendering
+
+MODIFIED COMPONENTS:
+  claudeverb/
+    algorithms/
+      __init__.py            -- MODIFIED: Register new algorithms in ALGORITHM_REGISTRY
+      filters.py             -- MODIFIED: Add TappedDelayLine, BiquadChain
+      base.py                -- MODIFIED: Add signal_flow_description() concrete method (returns None by default)
+    engine.py                -- MODIFIED: Add EQ post-processing, silence padding, C export orchestration
+    streamlit_app.py         -- MODIFIED: Real-time controls, EQ panel, export button, diagram display, multi-file
 ```
 
 ### Component Boundaries
 
-| Component | Responsibility | Communicates With | Does NOT Do |
-|-----------|---------------|-------------------|-------------|
-| **Audio I/O** (`audio/`) | Load, save, resample audio to 48 kHz float32. Provide bundled sample catalog. | Filesystem, Engine | DSP processing, analysis, UI |
-| **DSP Algorithms** (`algorithms/`) | Apply reverb processing to audio buffers. Manage parameters. Define C-portable state. | Engine (receives audio + params, returns processed audio) | File I/O, analysis, rendering |
-| **DSP Primitives** (`algorithms/filters.py`) | Comb, allpass, delay line, biquad EQ building blocks | Algorithms only (imported as library) | Nothing external |
-| **Analysis** (`analysis/`) | Compute spectrograms, RT60, DRR, C80/C50, spectral centroid from audio arrays | Engine (receives audio arrays, returns metrics/plot data) | Audio loading, DSP processing |
-| **Engine** (`engine.py`) | Orchestrate the process-then-play pipeline. Wire audio through algorithm, collect analysis, manage session state. | All core layers + UI via Streamlit session state | Direct rendering, file I/O details |
-| **Streamlit UI** (`ui/` or `app.py`) | Render controls, visualizations, audio player. Translate user actions into engine calls. | Engine (calls methods, reads results from session state) | DSP math, file parsing |
-| **Export** (`export/`) | Generate C code from algorithm instances | Algorithms (reads struct/process definitions) | Everything else |
+| Component | Responsibility | Communicates With |
+|-----------|---------------|-------------------|
+| New algorithm files | DSP processing, param specs, signal flow metadata | `base.py` (inherit ABC), `filters.py` (use primitives) |
+| `audio/realtime.py` | Threaded audio playback via sounddevice, parameter callback bridge | `engine.py` (gets algorithm instance), `streamlit_app.py` (receives param updates via session_state) |
+| `audio/padding.py` | Append silence to audio for reverb tail capture | `engine.py` (called before processing) |
+| `export/c_codegen.py` | Generate C source files from algorithm instances + current params | Algorithm instances (reads state/param values), `export/templates/` |
+| `diagrams/signal_flow.py` | Render signal-flow block diagrams as matplotlib figures | Algorithm instances (reads `signal_flow_description()`), `streamlit_app.py` (displays figure) |
+| `filters.py` additions | `TappedDelayLine` for early reflections, `BiquadChain` for EQ trails | Algorithms (use TappedDelayLine), `engine.py` (uses BiquadChain post-reverb) |
 
-### Data Flow
+### Data Flow Changes
 
-The pipeline is strictly **process-then-play** (not real-time streaming). This is the correct architecture for an algorithm development workbench because it prioritizes reproducibility and analysis over latency.
-
+**Current v1.0 flow (process-then-play):**
 ```
-1. USER selects sample + algorithm + parameters in UI
-                    |
-2. UI calls engine.process(sample_key, algorithm_name, params)
-                    |
-3. Engine loads audio via audio/io.py --> float32 array (N,) or (2,N) at 48kHz
-                    |
-4. Engine instantiates algorithm from ALGORITHM_REGISTRY
-   algorithm.update_params(params)
-                    |
-5. Engine calls algorithm.process(audio) --> processed_audio
-                    |
-6. Engine calls analysis functions on both input and processed audio:
-   - spectral.mel_spectrogram(audio) --> plot data
-   - spectral.fft_magnitude(audio) --> plot data
-   - metrics.rt60(audio) --> float seconds
-   - metrics.drr(audio) --> float dB
-   - metrics.c80(audio) --> float dB
-   - metrics.spectral_centroid(audio) --> float Hz
-                    |
-7. Engine stores results in session state (or returns result object)
-                    |
-8. UI reads results, renders:
-   - matplotlib figures for spectrograms/FFT
-   - metric values as text/gauges
-   - st.audio() player for wet, dry, and mixed output
+Audio File -> load() -> engine.process_audio(algo_name, params, audio)
+  -> algo.process(audio.copy()) -> wet signal
+  -> generate_impulse_response() -> IR
+  -> metrics + figures
+  -> blend_wet_dry(dry, wet, mix_pct) -> st.audio()
 ```
 
-**Key data types flowing through the system:**
+**v1.1 enhanced batch flow:**
+```
+Audio File -> load() -> padding.pad_for_tail(audio, tail_s)
+  -> engine.process_audio(algo_name, params, padded_audio, eq_params=...)
+    -> algo.process(padded_audio) -> wet_raw
+    -> eq_chain.process(wet_raw) -> wet_eq'd        [NEW: EQ on trail]
+    -> generate_impulse_response() -> IR
+    -> metrics + figures
+    -> signal_flow_description() -> diagram figure   [NEW: signal flow]
+  -> blend_wet_dry(dry_padded, wet_eq, mix_pct) -> st.audio()
+  -> c_codegen.generate(algo, params) -> /daisyexport/  [NEW: on button click]
+```
 
-| Data | Type | Shape | Notes |
-|------|------|-------|-------|
-| Raw audio | `np.ndarray float32` | `(N,)` or `(2, N)` | Always 48 kHz |
-| Parameters | `ReverbParams` dataclass | 6 knobs (int 0-100) + 2 switches (int -1/0/1) | Immutable between process calls |
-| Processed audio | `np.ndarray float32` | Same as input | Wet signal |
-| Mixed audio | `np.ndarray float32` | Same as input | wet/dry blend |
-| Analysis results | Dict or dataclass | Metrics + plot data | Passed to UI for rendering |
-| Impulse response | `np.ndarray float32` | `(N,)` | Generated by processing a unit impulse |
+**v1.1 real-time playback flow:**
+```
+Audio File -> load() -> padding.pad_for_tail(audio)
+  -> RealtimePlayer(algorithm, padded_audio, eq_chain)
+    -> sounddevice.OutputStream callback (runs in separate thread):
+        for each 48-sample block:
+          dry_block = read next block from source audio
+          wet_block = algorithm._process_impl(dry_block)  [NOTE: uses _process_impl not process -- skip validation in hot path]
+          wet_block = eq_chain.process(wet_block)
+          out_block = blend(dry_block, wet_block, mix)
+          -> output to DAC
+  <- UI knob change -> Streamlit rerun -> player.update_params(new_params)
+     -> algorithm.update_params() called from audio thread's next block
+```
+
+## Integration Details by Feature
+
+### 1. New Reverb Algorithms (Dattorro Variants, FDN, Room, Chamber)
+
+**Integration point:** Subclass `ReverbAlgorithm`, register in `ALGORITHM_REGISTRY`. Zero UI code changes needed -- the sidebar auto-generates controls from `param_specs`.
+
+**Dattorro variants strategy:** Do NOT create separate classes per parameter tweak. Instead, create 2-3 topology variants as separate classes that share helper code via composition:
+- `DattorroPlate` -- already exists (figure-eight tank, the "classic" plate)
+- `DattorroHall` -- longer delay lines, more diffusion stages, different tap positions
+- `DattorroRoom` -- shorter delays, reduced diffusion, earlier reflections emphasis
+
+Share the tank-half processing as a standalone function:
+```python
+def _process_tank_half(input_sample, decay_ap1, tank_delay1, damping_filter,
+                       decay_ap2, tank_delay2, dc_blocker, decay, lfo_mod,
+                       base_delay1, base_delay2):
+    """Process one half of a Dattorro figure-eight tank. Used by all variants."""
+    ...
+    return tank_output
+```
+
+This avoids inheritance (which breaks C export -- no vtables) while eliminating code duplication.
+
+**FDN reverb** (`fdn_reverb.py`): Feedback Delay Network with N=4 or N=8 delay lines and a Hadamard mixing matrix. The mixing matrix is a fixed NxN float32 array (C-portable). Delay lines reuse `DelayLine` from `filters.py`. The matrix multiply per sample is:
+```python
+# FDN core: output = delay_reads; feedback = matrix @ output; delay_writes = input + feedback
+outputs = [dl.read(dl.max_delay) for dl in self._delay_lines]
+feedback = hadamard_multiply(self._matrix, outputs)  # NxN * N -> N
+for j, dl in enumerate(self._delay_lines):
+    dl.write(input_sample + feedback[j] * self._decay)
+```
+
+**Room reverb** (`room_reverb.py`): Early reflections (tapped delay line) + late reverb (comb-allpass network, shorter than Freeverb). Requires new `TappedDelayLine` primitive.
+
+**Chamber reverb** (`chamber_reverb.py`): Similar to room but with denser early reflections and a longer, more diffuse tail. Can use FDN for the late part or a modified comb network.
+
+**New filter primitive needed in `filters.py`:**
+```python
+class TappedDelayLine:
+    """Multi-tap delay line for early reflections.
+    Fixed number of taps with per-tap delay and gain.
+    C-portable: MAX_TAPS defined at init, no dynamic allocation.
+    """
+    MAX_TAPS = 16  # Fixed upper bound for C struct
+
+    def __init__(self, max_delay: int, taps: list[tuple[int, float]]):
+        # taps: [(delay_samples, gain), ...]
+        self._delay = DelayLine(max_delay)
+        self._tap_delays = np.zeros(self.MAX_TAPS, dtype=np.int32)
+        self._tap_gains = np.zeros(self.MAX_TAPS, dtype=np.float32)
+        self._n_taps = min(len(taps), self.MAX_TAPS)
+        for i, (d, g) in enumerate(taps[:self.MAX_TAPS]):
+            self._tap_delays[i] = d
+            self._tap_gains[i] = np.float32(g)
+
+    def process_sample(self, x: float) -> float:
+        """Write input, return sum of all taps."""
+        self._delay.write(x)
+        output = 0.0
+        for i in range(self._n_taps):
+            output += self._tap_gains[i] * self._delay.read(self._tap_delays[i])
+        return float(output)
+```
+
+### 2. Real-Time Audio Playback
+
+**Integration point:** New `audio/realtime.py` module, stored in `st.session_state`, UI controls in `streamlit_app.py`.
+
+**Why sounddevice callback thread, not Streamlit audio:** Streamlit's `st.audio()` encodes WAV bytes and sends them to the browser. There is no way to interrupt playback or change parameters mid-stream. Real-time requires a server-side audio thread that reads blocks, processes through the algorithm, and outputs to the system DAC.
+
+```python
+# audio/realtime.py
+import threading
+import sounddevice as sd
+import numpy as np
+
+class RealtimePlayer:
+    """Plays audio through sounddevice with live DSP processing.
+
+    The sounddevice callback runs in a separate thread. Parameter updates
+    are passed via a thread-safe mechanism (simple dict swap -- Python's
+    GIL makes dict assignment atomic for our purposes).
+    """
+
+    def __init__(self, algorithm: ReverbAlgorithm, audio: np.ndarray,
+                 eq_chain=None, sample_rate: int = 48000, block_size: int = 48):
+        self._algorithm = algorithm
+        self._audio = audio  # padded source audio
+        self._eq_chain = eq_chain
+        self._position = 0
+        self._loop = False
+        self._mix_pct = 75
+        self._playing = False
+        self._stream = None
+        self._pending_params = None  # Set by UI thread, consumed by audio thread
+
+    def play(self, loop: bool = False) -> None:
+        """Start playback. Creates sounddevice.OutputStream."""
+        self._loop = loop
+        self._algorithm.reset()
+        if self._eq_chain:
+            self._eq_chain.reset()
+        self._position = 0
+        self._stream = sd.OutputStream(
+            samplerate=self._sample_rate,
+            blocksize=self._block_size,
+            channels=2,  # always stereo output
+            dtype='float32',
+            callback=self._audio_callback,
+        )
+        self._stream.start()
+        self._playing = True
+
+    def stop(self) -> None: ...
+    def update_params(self, params: dict) -> None:
+        """Called from Streamlit thread. Consumed by audio callback."""
+        self._pending_params = params  # Atomic dict assignment
+
+    def _audio_callback(self, outdata, frames, time_info, status):
+        """sounddevice callback -- runs in audio thread."""
+        # Check for pending param updates
+        params = self._pending_params
+        if params is not None:
+            self._algorithm.update_params(params)
+            self._pending_params = None
+        # Read block, process, output
+        ...
+```
+
+**Streamlit lifecycle management:** The `RealtimePlayer` must survive Streamlit reruns. Store it in `st.session_state["player"]`. On each rerun, check if it exists and is playing. The UI shows Play/Stop buttons and knobs. Knob changes trigger `player.update_params()` on each rerun.
+
+**Block size:** 48 samples at 48 kHz = 1ms. This matches `BUFFER_SIZE` in `config.py` and the Daisy Seed callback size. Excellent latency.
+
+**Multi-file and loop/single-shot:** The player holds one audio array. Switching files requires `player.stop()`, load new audio, create new player. Loop mode wraps the read pointer; single-shot stops at end.
+
+### 3. EQ on Reverb Trails
+
+**Integration point:** New `BiquadChain` class in `filters.py`, applied in `engine.py` between reverb output and wet/dry mix.
+
+```python
+# Addition to filters.py
+class BiquadChain:
+    """Ordered chain of Biquad filters for reverb trail EQ.
+    C-portable: fixed maximum number of bands."""
+    MAX_BANDS = 4
+
+    def __init__(self):
+        self._filters: list[Biquad] = []
+        self._enabled = True
+
+    def add(self, biquad: Biquad) -> None:
+        if len(self._filters) >= self.MAX_BANDS:
+            raise ValueError(f"Maximum {self.MAX_BANDS} EQ bands")
+        self._filters.append(biquad)
+
+    def process_sample(self, x: float) -> float:
+        if not self._enabled:
+            return x
+        for f in self._filters:
+            x = f.process_sample(x)
+        return x
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        if not self._enabled:
+            return block
+        for f in self._filters:
+            block = f.process(block)
+        return block
+
+    def reset(self) -> None:
+        for f in self._filters:
+            f.reset()
+```
+
+**Signal chain placement -- EQ on wet only:**
+```
+algorithm.process(audio) -> BiquadChain.process(wet) -> blend_wet_dry(dry, wet) -> output
+```
+
+The EQ shapes the reverb trail only, not the dry signal. This matches hardware reverb pedals with built-in EQ.
+
+**UI controls:** Add an expander in the sidebar with:
+- EQ enable/disable toggle
+- 2 bands default (low cut + high cut covers 80% of use cases for reverb shaping)
+- Per-band: type dropdown (LP/HP/peak/notch), frequency slider, Q slider, gain_db slider (for peak only)
+
+**engine.py modification:** `process_audio()` gains an optional `eq_params: list[dict] | None` argument. If provided, build `BiquadChain` from the param dicts, apply after `algo.process()`.
+
+### 4. Silence Padding for Reverb Tails
+
+**Integration point:** New `audio/padding.py`, called in `engine.py` before processing.
+
+```python
+# audio/padding.py
+def pad_for_tail(audio: np.ndarray, tail_seconds: float = 3.0,
+                 sample_rate: int = 48000) -> tuple[np.ndarray, int]:
+    """Append silence so reverb tail is captured after input ends.
+
+    Returns:
+        (padded_audio, original_length) -- original_length needed to
+        reconstruct the dry signal for blend.
+    """
+    pad_samples = int(tail_seconds * sample_rate)
+    if audio.ndim == 1:
+        padding = np.zeros(pad_samples, dtype=np.float32)
+        return np.concatenate([audio, padding]), len(audio)
+    else:
+        padding = np.zeros((2, pad_samples), dtype=np.float32)
+        return np.concatenate([audio, padding], axis=1), audio.shape[1]
+```
+
+**Where to apply:** In `engine.process_audio()`, before calling `algo.process()`. The dry signal must also be padded (with zeros) to match length for `blend_wet_dry()`. Currently `blend_wet_dry()` assumes same-length arrays, which is correct -- both dry and wet will be `original_length + pad_samples`.
+
+### 5. C Code Export
+
+**Integration point:** New `export/` package, UI button in `streamlit_app.py`.
+
+**Architecture: Template-based code generation with explicit type mapping.**
+
+Do NOT parse C struct descriptions from docstrings (fragile). Instead, add a concrete method to `base.py`:
+
+```python
+# Addition to base.py
+def c_state_fields(self) -> list[tuple[str, str, any]] | None:
+    """Return C struct field definitions: [(c_type, field_name, current_value), ...]
+    Returns None if C export is not implemented for this algorithm.
+    Override in subclasses that support C export."""
+    return None
+```
+
+The codegen module reads this + the algorithm's current params to produce:
+
+**Output structure in `/daisyexport/`:**
+```
+daisyexport/
+  dsp_primitives.h    -- DelayLine, CombFilter, AllpassFilter, Biquad, BiquadChain structs + inline functions
+  dsp_primitives.c    -- Implementation of non-inline functions
+  {algorithm_name}.h  -- Algorithm struct typedef + API declarations
+  {algorithm_name}.c  -- init(), process_sample(), update_params() implementations
+  main.c              -- Daisy Seed AudioCallback harness with libDaisy
+  Makefile             -- arm-none-eabi-gcc build rules
+```
+
+**UI integration:** "Export to C" button in sidebar. Uses current algorithm + current param values as `#define` defaults. Writes files to `daisyexport/` directory and offers ZIP download.
+
+### 6. Signal-Flow Diagrams
+
+**Integration point:** `base.py` gets a concrete (not abstract) `signal_flow_description()` method returning `None` by default. New `diagrams/signal_flow.py` renders these.
+
+**Making it concrete with a None default is critical** -- it means existing algorithms (Freeverb, DattorroPlate) continue working without modification. New algorithms can opt in by overriding.
+
+```python
+# Addition to base.py (NOT abstract -- concrete with None default)
+def signal_flow_description(self) -> dict | None:
+    """Declarative signal flow for diagram rendering.
+    Override to provide algorithm-specific signal flow.
+
+    Returns dict with:
+      nodes: [{id, label, type}] -- type: input|output|delay|filter|mixer|splitter|allpass|comb
+      edges: [{from_id, to_id, label?}]
+      groups: [{id, label, node_ids}] -- for visual grouping (e.g., "Left Tank", "Right Tank")
+    """
+    return None
+```
+
+**Renderer** (`diagrams/signal_flow.py`):
+```python
+def render_signal_flow(description: dict) -> plt.Figure:
+    """Render a block diagram from a signal_flow_description dict.
+    Uses matplotlib patches and arrows. No external graph library needed.
+    """
+```
+
+Use matplotlib's `FancyBboxPatch` for nodes and `FancyArrowPatch` for edges. Color-code by node type (blue for delays, green for filters, etc.). This avoids adding graphviz as a dependency.
+
+**UI display:** In the main area, add a "Signal Flow" expander or tab that renders the diagram for the currently selected algorithm. Only shown if `signal_flow_description()` returns non-None.
+
+### 7. Multi-File Loading
+
+**Integration point:** `streamlit_app.py` session state only. No architectural changes.
+
+```python
+# In session_state
+st.session_state["loaded_files"] = {
+    "audio1-acoustic": np.ndarray,  # bundled sample
+    "uploaded_guitar.wav": np.ndarray,  # user upload
+    ...  # max 5
+}
+st.session_state["active_file"] = "audio1-acoustic"
+```
+
+UI shows a selectbox to pick the active file. When switching files during real-time playback, stop playback first, swap audio in player, restart.
 
 ## Patterns to Follow
 
-### Pattern 1: Algorithm Registry
+### Pattern 1: Registry Auto-Discovery (unchanged)
+All new algorithms register in `ALGORITHM_REGISTRY`. The UI auto-generates controls. Zero UI code per algorithm.
 
-**What:** A single dict mapping algorithm names to classes. The UI reads this to populate dropdowns. New algorithms register here and appear everywhere.
+### Pattern 2: Sample-by-Sample with Block Wrapper (unchanged)
+All new DSP components implement `process_sample()` for the inner loop and `process()` for block convenience. The sample-by-sample path maps directly to C.
 
-**When:** Always. Every algorithm must be in the registry.
+### Pattern 3: Facade Engine Isolation (extended)
+The engine gains new responsibilities (EQ application, padding, export orchestration) but remains the single coordination point. The UI never calls algorithms, analysis, or export directly.
 
-**Example:**
+### Pattern 4: C-Portable State (unchanged, enforced on new components)
+All new filters (`TappedDelayLine`, `BiquadChain`) and algorithms use `__slots__`, float32, fixed-size arrays. The `test_c_portability.py` tests must be extended to cover all new components.
 
-```python
-# claudeverb/algorithms/__init__.py
-from .freeverb import Freeverb
-from .dattorro_plate import DattorroPlate
-
-ALGORITHM_REGISTRY: dict[str, type[ReverbAlgorithm]] = {
-    "Freeverb": Freeverb,
-    "Dattorro Plate": DattorroPlate,
-}
-```
-
-### Pattern 2: Stateful Algorithm, Stateless Analysis
-
-**What:** Algorithms hold mutable state (delay lines, filter memory) and are long-lived objects that can be reset. Analysis functions are pure -- they take arrays in, return values out, hold no state.
-
-**When:** This split prevents bugs where analysis state leaks into DSP or vice versa.
-
-**Example:**
-
-```python
-# Algorithm: stateful
-class Freeverb(ReverbAlgorithm):
-    def _initialize(self):
-        self.combs = [CombFilter(length) for length in COMB_LENGTHS]
-        # State lives here, allocated once
-
-    def process(self, audio: np.ndarray) -> np.ndarray:
-        # Mutates internal state (delay line positions advance)
-        ...
-
-# Analysis: stateless
-def rt60(audio: np.ndarray, sr: int = 48000) -> float:
-    # Pure function, no side effects
-    ...
-```
-
-### Pattern 3: Parameter Specs Drive UI Generation
-
-**What:** Each algorithm declares a `param_specs` dict that describes its knobs and switches. The UI reads these specs and auto-generates controls. No hardcoded UI per algorithm.
-
-**When:** Always. This is what makes the workbench generic across algorithms.
-
-**Example:**
-
-```python
-@property
-def param_specs(self) -> dict[str, ParamSpec]:
-    return {
-        "room_size": ParamSpec(min=0, max=100, default=75, label="Room Size"),
-        "damping": ParamSpec(min=0, max=100, default=50, label="Damping"),
-        # ...up to 6 knobs
-        "switch_1": SwitchSpec(positions=[-1, 0, 1], default=0, label="Mode"),
-        "switch_2": SwitchSpec(positions=[-1, 0, 1], default=0, label="Character"),
-    }
-```
-
-### Pattern 4: Engine as Mediator
-
-**What:** The Engine class is the single point of coordination. The UI never calls algorithms or analysis directly. This keeps the UI thin and the processing pipeline testable without UI.
-
-**When:** Always. Critical for testability -- you can run the full pipeline in pytest without Streamlit.
-
-**Example:**
-
-```python
-class Engine:
-    def process(self, sample_key: str, algo_name: str, params: dict) -> ProcessResult:
-        audio = load_sample(sample_key)
-        algo = ALGORITHM_REGISTRY[algo_name]()
-        algo.update_params(ReverbParams.from_dict(params))
-        wet = algo.process(audio)
-        mixed = mix_wet_dry(audio, wet, params.get("mix", 50) / 100.0)
-        analysis = self._analyze(audio, wet, mixed)
-        return ProcessResult(dry=audio, wet=wet, mixed=mixed, analysis=analysis)
-```
-
-### Pattern 5: C-Portable State Separation
-
-**What:** Algorithm state must be representable as C structs (fixed-size arrays, scalars, no Python objects in the hot path). The `_initialize()` method is the only place allocation happens. `process()` must never allocate.
-
-**When:** Every algorithm. This is the project's core architectural constraint.
-
-**Why this matters architecturally:** This constraint means algorithms cannot use Python lists that grow, dicts, or any dynamic data structure during processing. Delay lines must be pre-allocated circular buffers with fixed max lengths. This directly shapes how every algorithm is written.
-
-```python
-class DelayLine:
-    """C equivalent:
-    typedef struct {
-        float buffer[MAX_LENGTH];
-        int write_pos;
-        int length;
-    } DelayLine;
-    """
-    def __init__(self, max_length: int):
-        self.buffer = np.zeros(max_length, dtype=np.float32)
-        self.write_pos = 0
-        self.length = max_length
-```
+### Pattern 5: Thread-Safe Parameter Updates for Real-Time
+**New pattern.** The real-time player uses atomic dict swap for parameter updates. The Streamlit thread writes `player._pending_params = new_dict`. The audio callback thread reads and clears it. Python's GIL makes single-attribute assignment atomic.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Real-Time Processing in v1
+### Anti-Pattern 1: Inheritance for Algorithm Variants
+**What:** Making `DattorroHall(DattorroPlate)` inheritance hierarchies.
+**Why bad:** Topologies differ structurally (different delay counts, tap patterns). Inheritance forces shared `_process_impl()` that becomes conditional spaghetti. Also breaks C export (no vtables in C structs).
+**Instead:** Composition. Share helper functions and filter primitives. Each algorithm is standalone.
 
-**What:** Trying to process audio in real-time with live knob changes through Streamlit.
+### Anti-Pattern 2: Real-Time Processing in Streamlit's Main Thread
+**What:** Running sounddevice callbacks synchronized with Streamlit reruns.
+**Why bad:** Streamlit reruns the entire script on every widget interaction. The audio thread must be fully decoupled.
+**Instead:** Store `RealtimePlayer` in `st.session_state`. It owns the sounddevice thread independently.
 
-**Why bad:** Streamlit re-runs the entire script on every widget change. Real-time audio requires a dedicated audio thread with lock-free communication to the UI. Mixing these paradigms creates latency spikes, audio glitches, and architectural complexity that blocks algorithm development (the actual goal).
+### Anti-Pattern 3: Putting EQ Inside Algorithm Classes
+**What:** Adding EQ bands as part of each algorithm's `_process_impl()`.
+**Why bad:** EQ is a post-processing step that applies identically to ALL algorithms. Duplicating it in each algorithm violates DRY and complicates C export.
+**Instead:** `BiquadChain` applied in `engine.py` after `algorithm.process()` returns.
 
-**Instead:** Process-then-play. User sets params, clicks "Process", hears result. This is how professional audio analysis tools (Audacity, iZotope RX) work for non-realtime tasks.
+### Anti-Pattern 4: Generating C Code from Docstrings
+**What:** Parsing the C struct comments in algorithm docstrings to generate code.
+**Why bad:** Fragile, no type checking, breaks silently when comments drift from implementation.
+**Instead:** Structured `c_state_fields()` method or explicit codegen registry.
 
-### Anti-Pattern 2: Analysis Inside Algorithms
+### Anti-Pattern 5: Abstract Methods for Optional Features
+**What:** Making `signal_flow_description()` or `c_state_fields()` abstract on the base class.
+**Why bad:** Forces every existing and future algorithm to implement them even if they have nothing to provide. Breaks existing tests.
+**Instead:** Concrete methods returning `None` by default. Subclasses override when ready.
 
-**What:** Having algorithms compute their own RT60 or spectral analysis.
+## Suggested Build Order
 
-**Why bad:** Violates single responsibility. Algorithms should only transform audio. Analysis is a separate concern that operates on the output. Coupling them makes algorithms harder to port to C (analysis uses scipy/librosa which have no C equivalent).
-
-**Instead:** Engine runs analysis as a separate step after processing.
-
-### Anti-Pattern 3: UI-Specific Code in Algorithm Layer
-
-**What:** Algorithms importing Streamlit, matplotlib, or any UI framework.
-
-**Why bad:** Algorithms must be testable in headless pytest and eventually portable to C. Any UI dependency makes this impossible.
-
-**Instead:** Algorithms return numpy arrays. The UI layer handles all rendering.
-
-### Anti-Pattern 4: Global Mutable State for Audio
-
-**What:** Storing the current audio buffer in a module-level global variable.
-
-**Why bad:** Streamlit's execution model re-runs the script on every interaction. Global state gets reset or stale. Multiple browser tabs share the server process.
-
-**Instead:** Use `st.session_state` for Streamlit, or pass audio through the Engine's method calls explicitly.
-
-### Anti-Pattern 5: Dynamic Allocation in process()
-
-**What:** Creating new numpy arrays, lists, or objects inside the hot loop of `process()`.
-
-**Why bad:** Breaks C portability. In C on STM32, you cannot malloc during audio callback. The Python code must mirror this constraint to ensure the algorithm actually works when ported.
-
-**Instead:** Pre-allocate all buffers in `_initialize()`. Use in-place operations in `process()`.
-
-## Streamlit-Specific Architecture Considerations
-
-Streamlit has a unique execution model that shapes the architecture:
-
-1. **Script re-execution:** Every widget interaction re-runs the entire Python script top to bottom. Heavy computation must be cached or gated behind explicit "Process" buttons.
-
-2. **Session state:** Use `st.session_state` to persist the Engine instance, loaded audio, and results across re-runs. Initialize in an `if "engine" not in st.session_state:` guard.
-
-3. **Caching:** Use `@st.cache_data` for audio loading (deterministic, returns data) and `@st.cache_resource` for the Engine (singleton, holds state). Do NOT cache algorithm processing -- the whole point is re-processing with new params.
-
-4. **Audio playback:** `st.audio()` accepts numpy arrays directly (with sample_rate parameter). No need to save to temp files.
-
-5. **Layout:** Use `st.columns()` for side-by-side input/output spectrograms. Use `st.sidebar` for algorithm selection and parameters. Use `st.tabs()` to separate visualization types.
-
-## Recommended Directory Structure
+Build in this order to respect dependencies and enable incremental testing:
 
 ```
-claudeverb/
-  __init__.py
-  config.py              # SAMPLE_RATE, BUFFER_SIZE, paths
-  engine.py              # Pipeline orchestrator
+Phase 1: Foundation Primitives (no UI changes, no breakage)
+  1. audio/padding.py              -- Simple np.concatenate, enables tail preservation
+  2. filters.py: TappedDelayLine   -- Needed by Room/Chamber algorithms
+  3. filters.py: BiquadChain       -- Needed by EQ feature
+  Tests for each.
 
-  algorithms/
-    __init__.py           # ALGORITHM_REGISTRY
-    base.py               # ReverbAlgorithm ABC, ReverbParams, ParamSpec
-    filters.py            # CombFilter, AllpassFilter, DelayLine, EQFilter
-    freeverb.py           # Freeverb implementation
-    dattorro_plate.py     # Dattorro plate reverb
+Phase 2: New Algorithms (registry additions only)
+  4. fdn_reverb.py                 -- New topology, independent
+  5. room_reverb.py                -- Uses TappedDelayLine + combs/allpass
+  6. chamber_reverb.py             -- Uses TappedDelayLine + FDN or combs
+  7. dattorro_variants.py          -- Extends existing Dattorro work
+  Register all in __init__.py. Tests for each. UI auto-discovers them.
 
-  audio/
-    __init__.py
-    io.py                 # load(), save(), resample
-    samples/              # Bundled test audio files
-      clap.wav
-      snare.wav
-      guitar_dry.wav
+Phase 3: Engine Enhancements (modify engine.py)
+  8. engine.py: silence padding    -- Call padding.pad_for_tail() before processing
+  9. engine.py: EQ post-processing -- Apply BiquadChain between reverb and mix
+  10. base.py: signal_flow_description() + c_state_fields() -- Concrete defaults
 
-  analysis/
-    __init__.py
-    spectral.py           # mel_spectrogram(), fft_magnitude(), stft()
-    metrics.py            # rt60(), drr(), c80(), spectral_centroid()
-    impulse.py            # generate_impulse_response(algorithm)
+Phase 4: Visualization + UI Features
+  11. diagrams/signal_flow.py           -- Matplotlib block diagram renderer
+  12. streamlit_app.py: EQ controls     -- Expander with band params
+  13. streamlit_app.py: multi-file      -- Session state management, selectbox
+  14. streamlit_app.py: diagram display -- Tab/expander for signal flow
+  15. Algorithm signal_flow_description() overrides -- Per-algorithm
 
-  export/
-    __init__.py
-    c_codegen.py          # export_algorithm() --> .h/.c files
+Phase 5: Real-Time Playback (most complex integration)
+  16. audio/realtime.py                 -- sounddevice thread + param bridge
+  17. streamlit_app.py: playback UI     -- Play/stop/loop, live knobs
+  Manual testing required (audio thread behavior hard to unit test).
 
-  ui/
-    __init__.py
-    app.py                # Streamlit entry point
-    components.py         # Reusable Streamlit widgets (param panel, spectrogram viewer)
-
-tests/
-  conftest.py             # mono_sine, stereo_sine, impulse fixtures
-  test_algorithms/
-    test_freeverb.py
-    test_dattorro_plate.py
-    test_filters.py
-  test_analysis/
-    test_spectral.py
-    test_metrics.py
-  test_audio/
-    test_io.py
-  test_engine.py
+Phase 6: C Export (needs finalized algorithms)
+  18. export/c_codegen.py               -- Template-based generation
+  19. export/templates/                  -- Primitive + algorithm C templates
+  20. Algorithm c_state_fields() overrides
+  21. streamlit_app.py: export button   -- Trigger + ZIP download
 ```
 
-## Suggested Build Order (Dependencies)
-
-The architecture has clear dependency layers that dictate build order:
-
-```
-Phase 1: Foundation (no dependencies)
-  config.py
-  algorithms/base.py (ABC + dataclasses)
-  algorithms/filters.py (DSP primitives)
-  audio/io.py (load/save)
-
-Phase 2: First Algorithm (depends on Phase 1)
-  algorithms/freeverb.py
-  tests for filters + freeverb
-
-Phase 3: Analysis (depends on Phase 1, independent of Phase 2)
-  analysis/spectral.py
-  analysis/metrics.py
-  analysis/impulse.py
-
-Phase 4: Engine (depends on Phases 1-3)
-  engine.py (wires everything together)
-  test_engine.py
-
-Phase 5: UI (depends on Phase 4)
-  ui/app.py + ui/components.py
-  Manual testing with Streamlit
-
-Phase 6: Second Algorithm (depends on Phase 1 only)
-  algorithms/dattorro_plate.py
-  Tests
-
-Phase 7: Export (depends on Phase 2+)
-  export/c_codegen.py
-```
-
-**Key dependency insight:** Analysis (Phase 3) and the first algorithm (Phase 2) can be built in parallel because they share only the base types from Phase 1. The Engine (Phase 4) is the integration point where they come together. The UI (Phase 5) sits on top of everything and should be built last among the core components -- but Streamlit's rapid prototyping nature means you can stand up a minimal UI early and iterate.
-
-**Recommended approach:** Build Phases 1-2 first (get audio flowing through Freeverb), then add a minimal Streamlit UI early (even before full analysis) so you can listen to output. Iterate from there. Hearing the algorithm output is the fastest feedback loop for a reverb workbench.
+**Phase ordering rationale:**
+- Phases 1-2 are pure additions with no modifications to existing code -- zero risk of breakage
+- Phase 3 modifies engine.py but changes are additive (new optional params)
+- Phase 4 is UI polish that builds on Phase 3
+- Phase 5 (real-time) is isolated to its own module but requires careful Streamlit lifecycle management -- benefits from all algorithms being stable first
+- Phase 6 (C export) needs all algorithms finalized so the codegen covers the full set
 
 ## Scalability Considerations
 
-| Concern | Single Algorithm | 5+ Algorithms | With C Export |
-|---------|-----------------|---------------|---------------|
-| Registry | Simple dict | Same dict, no change needed | No impact |
-| UI params | Auto-generated from specs | Same pattern scales | No impact |
-| Processing time | < 1s for typical audio | Same (one at a time) | N/A |
-| Memory | ~10MB per loaded audio | Same (process one at a time) | N/A |
-| Testing | Per-algorithm test file | Parametrized fixtures across all | Add C compilation tests |
-
-The architecture scales naturally to many algorithms because the registry + param_specs pattern means zero UI code changes per new algorithm. The bottleneck will be algorithm development time, not architecture.
+| Concern | Current (2 algos) | At 8 algorithms | At 20+ algorithms |
+|---------|-------------------|------------------|--------------------|
+| Registry | Dict literal | Dict literal, still fine | Auto-discovery via module scanning |
+| UI controls | Auto-generated from param_specs | Works unchanged | Need algorithm categories in sidebar |
+| C export | Per-algorithm templates | Template per algo + shared primitives | Consider structured IR for algorithm description |
+| Real-time perf | Python sample loop fine | Only 1 algo active at a time | Complex algos may need numpy vectorized batch mode |
+| Signal flow diagrams | Hand-authored per algorithm | Repetitive | Consider DSL for signal flow description |
 
 ## Sources
 
-- Existing project ARCHITECTURE.md (project-local documentation)
-- PROJECT.md constraints and requirements
-- Domain knowledge: Freeverb (Jezar's public domain implementation), Dattorro plate reverb (Jon Dattorro, "Effect Design Part 1: Reverberator and Other Filters", J. Audio Eng. Soc., 1997)
-- Streamlit execution model: training data knowledge (MEDIUM confidence -- verify `st.audio()` numpy support against current Streamlit docs)
-- DSP architecture patterns: well-established in audio engineering literature
-
-**Confidence note:** The Streamlit-specific claims (st.audio accepting numpy, st.cache_resource behavior) are based on training data and should be verified against current Streamlit documentation when implementation begins.
+- Existing codebase analysis -- direct inspection of all .py files (HIGH confidence)
+- Dattorro, J. "Effect Design Part 1: Reverberator and Other Filters" JAES 1997 -- tank topology, output taps, figure-eight structure (HIGH confidence)
+- sounddevice library -- callback-based audio streaming, already in project deps via sounddevice (HIGH confidence)
+- Streamlit session_state -- persistent state across reruns, established pattern already used in v1.0 code (HIGH confidence)
+- Pirkle, W. "Designing Audio Effect Plugins in C++" -- FDN topology, Hadamard matrix, room reverb early reflections patterns (MEDIUM confidence -- training data)
+- Smith, J.O. "Physical Audio Signal Processing" -- FDN mixing matrices, allpass theory (MEDIUM confidence -- training data)

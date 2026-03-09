@@ -1,319 +1,263 @@
 # Domain Pitfalls
 
-**Domain:** Algorithmic reverb DSP workbench (Python with C portability to STM32 Daisy Seed)
-**Researched:** 2026-03-04
-**Sources:** Training data (established DSP domain, Freeverb circa 2000, Dattorro 1997). Web search unavailable. Core DSP principles are stable and unlikely to have changed. Confidence is HIGH for algorithmic/DSP pitfalls, MEDIUM for tooling-specific pitfalls.
+**Domain:** DSP reverb workbench v1.1 -- adding Dattorro variants, FDN reverb, Room/Chamber reverb, real-time audio, EQ on trails, C export, signal-flow diagrams
+**Researched:** 2026-03-07
+**Context:** Building on v1.0 (Freeverb + Dattorro Plate working, Streamlit UI, process-then-play workflow, 152 tests passing). These pitfalls are specific to the v1.1 feature set.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, inaudible output, or broken C portability.
+Mistakes that cause rewrites or major issues.
 
-### Pitfall 1: Sample-Rate-Dependent Delay Line Lengths
+### Pitfall 1: FDN Feedback Matrix Instability
 
-**What goes wrong:** Freeverb's original delay line lengths (1557, 1617, 1491, 1422, 225, 556, 441, 341) are tuned for 44.1 kHz. Using them at 48 kHz without scaling produces a reverb with wrong decay character -- shorter perceived room size, different modal density, and metallic coloring.
+**What goes wrong:** The FDN reverb blows up (output goes to infinity) or decays unevenly across frequencies because the feedback matrix has eigenvalues with modulus > 1 or has coupled repeated poles.
 
-**Why it happens:** Most Freeverb references (including Jezar's original C++ code) hardcode lengths for 44.1 kHz. Developers copy these constants without understanding they encode physical room dimensions via `delay_samples = time_seconds * sample_rate`.
+**Why it happens:** FDN stability requires a unitary (or orthogonal) feedback matrix -- all eigenvalues must have modulus exactly 1. Developers often use arbitrary matrices, random rotations with rounding errors, or matrices that are "close to unitary" but not exactly so. At 48 kHz with long delay lines, even tiny deviations from unitarity accumulate over millions of samples and cause exponential blowup or uneven frequency decay.
 
-**Consequences:** The reverb sounds "off" -- slightly pitched, wrong decay time, unnatural resonances. Worse, if you tune parameters to compensate, the algorithm is no longer a proper Freeverb and the tuning won't transfer to other sample rates.
+**Consequences:** Audio clips, distorts, or blows up. If eigenvalues are merely close to 1 but not exact, the reverb may sound fine for short inputs but explode on sustained sounds or long tails. This is the single hardest bug to diagnose because it manifests differently depending on input material and parameter settings.
 
 **Prevention:**
-- Scale all delay line lengths by `target_rate / reference_rate` (48000/44100 = 1.0884)
-- Round to nearest prime number after scaling (primes prevent resonance buildup from common factors)
-- Store delay lengths as computed values from a `_compute_delay_lengths(sample_rate)` method, never as hardcoded constants
-- Document the reference sample rate for any delay lengths taken from literature
+- Use a mathematically guaranteed unitary matrix: Hadamard (for power-of-2 sizes), Householder reflection (`I - 2vv^T/||v||^2`), or an explicitly constructed orthogonal matrix.
+- For the Daisy Seed target (Cortex-M7 with FPU), Householder is ideal: O(N) multiply per sample vs O(N^2) for general unitary. A 4x4 or 8x8 Householder with `v = [1,1,1,...,1]` gives the classic "all-ones" reflection matrix.
+- Test with a 10-second silence input after a click -- output energy must monotonically decrease. Add an automated test that checks `max(abs(output[-48000:])) < max(abs(output[:48000]))` for any parameter combination.
+- Never construct the matrix at runtime from user parameters. Pre-define 2-3 fixed unitary matrices and let the user select between them via a switch. Parameters should control delay lengths, feedback gain (scaling applied AFTER the unitary matrix), and damping -- not the matrix itself.
 
-**Detection:** Compare RT60 measurements of your implementation against reference implementations at the same parameter settings. If RT60 or spectral shape differs significantly, check delay lengths first.
+**Detection:** Output energy increasing over time. DC offset growing. Clipping at the end of long reverb tails. The existing `measure_rt60()` function returning negative or infinite values.
 
-**Phase relevance:** Must be addressed in initial algorithm implementation (Phase 1/2). Wrong from day one means all subsequent tuning is wasted.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- well-established DSP theory. See [CCRMA FDN reference](https://ccrma.stanford.edu/~jos/pasp/FDN_Reverberation.html) and [KVR FDN discussion](https://www.kvraudio.com/forum/viewtopic.php?t=123095).
 
 ---
 
-### Pitfall 2: Python Float64 vs C Float32 Numerical Divergence
+### Pitfall 2: Real-Time Audio in Streamlit is Architecturally Impossible Without a Hybrid Approach
 
-**What goes wrong:** NumPy defaults to float64. Your Python reverb sounds great, you export to C (float32 on STM32), and the output sounds different -- sometimes subtly (slightly different decay tail), sometimes catastrophically (filter instability, DC offset buildup, or outright blowup).
+**What goes wrong:** Developers try to add "live knob tweaking with real-time playback" inside Streamlit and discover that Streamlit's architecture makes true real-time audio impossible. `st.audio` plays pre-rendered WAV bytes -- there is no streaming audio output. Parameter changes trigger full page reruns.
 
-**Why it happens:** Recursive filters (comb filters, allpass filters) accumulate rounding errors over thousands of samples. The difference between float64 and float32 precision in feedback paths compounds exponentially. A comb filter with feedback 0.84 running at 48 kHz processes ~48000 multiply-accumulates per second, each slightly different between precisions.
+**Why it happens:** Streamlit is a reactive framework: every widget interaction causes the entire script to re-execute. There is no persistent audio output stream, no callback mechanism for continuous playback, and `st.*` methods cannot be called from background threads. The existing `sounddevice` dependency could provide real-time audio via PortAudio callbacks, but `sounddevice` operates in a separate thread that cannot interact with Streamlit widgets.
 
-**Consequences:** Two separate bugs: (1) The Python prototype gives false confidence -- it sounds good but the C version won't match. (2) Subtle instabilities that only appear in float32 after long audio passages (DC drift, denormal slowdowns on x86, NaN propagation).
+**Consequences:** If you try to build real-time playback purely in Streamlit, you end up with one of: (a) a "process-then-play" workflow that is functionally identical to what v1.0 already has, (b) a fragile hack using `streamlit-webrtc` that adds massive complexity, or (c) a hybrid architecture where `sounddevice` runs audio in a background thread while Streamlit provides the UI, communicating via shared state with locks.
 
 **Prevention:**
-- Enforce `np.float32` everywhere from day one. Set `audio = audio.astype(np.float32)` at load time and assert float32 in every process() entry point
-- Use `np.float32` for all internal state arrays (delay lines, filter coefficients, accumulators)
-- Add a `_validate_state_dtype()` method to the base class that asserts all state arrays are float32
-- Add denormal flushing: clamp values below ~1e-15 to zero (prevents CPU slowdowns on x86 and matches ARM behavior)
-- Test with 30+ second audio files to catch slow-building numerical issues
+- Accept that "real-time" in Streamlit means: `sounddevice.OutputStream` runs the audio callback in a PortAudio thread, reading from a shared audio buffer. Streamlit UI writes parameter changes to a thread-safe shared state. The audio callback reads current parameters each block and applies them.
+- The audio callback must process exactly `BUFFER_SIZE=48` samples per call (matching Daisy Seed), reading the current algorithm state and writing output to the sounddevice buffer.
+- Use `sd.OutputStream(callback=..., blocksize=48, samplerate=48000)` for the audio thread.
+- Keep Streamlit responsible ONLY for: loading files, displaying parameters, showing analysis. Audio playback is entirely via sounddevice.
+- Do NOT try to synchronize Streamlit UI updates with audio playback position -- accept that analysis/visualization updates lag behind audio.
+- The current engine's `process_audio()` function creates a fresh algorithm instance each call. Real-time mode needs a persistent algorithm instance that lives across Streamlit reruns -- store it in `st.session_state` or a module-level singleton.
 
-**Detection:** Run the same audio through Python (float32-enforced) and C implementations, compute sample-by-sample difference. If max absolute error exceeds ~1e-3 after 5 seconds, you have a divergence problem.
+**Detection:** Audio glitches (buffer underruns), Streamlit freezing during playback, inability to change parameters while audio plays.
 
-**Phase relevance:** Must be a rule from the very first line of algorithm code. Retrofitting float32 into a float64 codebase means retuning every coefficient.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- verified via [Streamlit community discussion on real-time audio](https://discuss.streamlit.io/t/experience-report-working-with-realtime-audio-in-streamlit/86637) and [sounddevice threading docs](https://python-sounddevice.readthedocs.io/en/latest/api/streams.html).
 
 ---
 
-### Pitfall 3: Circular Buffer Index Bugs (Off-by-One and Modulo Errors)
+### Pitfall 3: Dattorro Topology Modifications Breaking Stability and Character
 
-**What goes wrong:** Circular buffer implementations silently produce wrong output -- clicks, pops, short bursts of noise, or subtly wrong delay times. These bugs are intermittent and hard to reproduce because they depend on buffer position.
+**What goes wrong:** Modifications to the Dattorro plate topology (adding diffusion stages, changing tank structure, modifying tap positions) produce metallic artifacts, uneven decay, channel bouncing, or a persistent tail that never fully decays.
 
-**Why it happens:** Three common variants:
-1. **Read-before-write vs write-before-read:** Determines whether delay is N or N-1 samples. Getting this wrong shifts all delay lengths by 1 sample.
-2. **Modulo arithmetic bugs:** `index % length` works in Python but in C, negative modulo behaves differently (`-1 % 5` is `-1` in C but `4` in Python).
-3. **Index update timing:** Updating the write pointer before or after reading from it changes the output.
+**Why it happens:** The Dattorro topology is a carefully tuned figure-eight feedback network. The delay lengths, diffusion coefficients, tap positions, and cross-feedback points were chosen together as an interdependent system. The existing `DattorroPlate` implementation has 14 output taps at specific positions scaled from the 1997 paper -- moving or adding taps changes the frequency coloration. The paper itself notes that topology changes require complete re-tuning.
 
-**Consequences:** Wrong delay times (subtle pitch/resonance issues), occasional clicks at buffer wraparound, or -- worst case -- reading uninitialized memory in C.
+**Consequences:** Variants that sound metallic, colored, or unstable. Stereo modifications that cause the reverb to "bounce" between channels. Topology changes that require complete re-tuning of all parameters, effectively designing a new reverb from scratch. Per [KVR discussion](https://www.kvraudio.com/forum/viewtopic.php?t=564078): modifying the topology for stereo input "results in non-smooth response with uneven decay time" and "unbalanced tank feeding can cause output bouncing between channels."
+
+**Consequences for v1.1 specifically:** The project scopes "Dattorro parameter variants" AND "topology variants." These are very different risk levels. Parameter variants are safe tweaks to the existing `DattorroPlate` class. Topology variants are effectively new algorithms.
 
 **Prevention:**
-- Implement a single `DelayLine` class used by ALL algorithms. Never inline circular buffer logic.
-- The DelayLine must have exactly two public methods: `write(sample)` and `read(delay_taps)` with clear documentation of the delay semantics
-- Use `& (length - 1)` instead of `% length` for power-of-2 buffers (faster in C, no negative modulo issue) -- but this means delay lengths must be rounded up to power-of-2
-- OR use the pattern `index = (index + 1) if (index + 1) < length else 0` which avoids modulo entirely
-- Write a unit test that verifies exact delay: write an impulse, read it back after N samples, confirm it appears at exactly sample N
-- Write a stress test: process 10 million samples and check for any sample outside [-1.0, 1.0]
+- **Parameter variants are safe:** Changing `decay`, `bandwidth`, `damping`, `diffusion`, `pre_delay`, `mod_depth` ranges, scaling curves, or default values. Adding new switch modes (e.g., "dark" mode that reduces bandwidth and increases damping). These modify `_scale_params()` but not the topology in `_process_impl()`. Low risk.
+- **Topology variants are high-risk:** Treat each topology change as a new algorithm class. Create `DattorroHall`, `DattorroAmbience`, etc. as separate classes sharing primitives from `filters.py` but with independently tuned delay lengths, tap positions, and diffusion structure.
+- **Never modify tap positions without listening tests.** The tap positions in the current implementation (`LEFT_TAPS_29761`, `RIGHT_TAPS_29761`) are from Table 2 of the paper.
+- **Do not add extra feedback paths** without understanding the resulting transfer function. Each additional path changes the pole structure and can create instability.
+- Budget 2x the expected time for each topology variant. The Dattorro paper itself states tuning is 70% of reverb development effort.
 
-**Detection:** Impulse response test. Send a single `1.0` sample followed by zeros. The output should show taps at exactly the expected delay times. If taps are off by 1, you have a read/write ordering bug.
+**Detection:** A/B listening test against the reference `DattorroPlate` with identical parameter settings. RT60 measurement should be consistent across frequency bands. Impulse response FFT should not show new resonant peaks.
 
-**Phase relevance:** Foundation. The DelayLine class should be the first thing built and tested before any algorithm code.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- corroborated by [KVR Dattorro improvements thread](https://www.kvraudio.com/forum/viewtopic.php?t=564078), the [original paper](https://ccrma.stanford.edu/~dattorro/EffectDesignPart1.pdf), and the existing codebase structure.
 
 ---
 
-### Pitfall 4: Comb Filter Feedback Coefficient Instability
+### Pitfall 4: C Export Generating Non-Functional Code
 
-**What goes wrong:** Comb filter feedback values >= 1.0 cause exponential blowup. Values very close to 1.0 (e.g., 0.999) cause extremely long, unrealistic decay that sounds like ringing. The mapping from user-facing "decay" parameter (0-100) to internal feedback coefficient is where most reverb tuning bugs live.
+**What goes wrong:** The C code export produces syntactically correct `.h`/`.c` files that compile but do not produce the same output as the Python implementation, or crash on the Daisy Seed due to stack overflow, uninitialized memory, or floating-point edge cases.
 
-**Why it happens:** The relationship between feedback gain `g`, delay length `D`, and RT60 is: `g = 10^(-3 * D / (RT60 * sample_rate))`. Getting this formula wrong, or applying knob-to-parameter mapping that allows `g >= 1.0`, produces unstable filters.
+**Why it happens:** Multiple failure modes specific to this codebase:
+1. **Python-to-C intermediate precision:** The Python code uses `np.float32` for state variables (verified by `test_c_portability.py`), but intermediate calculations like `x * self._feedback + delay_out` in `AllpassFilter.process_sample()` happen in Python 64-bit float before being cast back to `np.float32`. The C code uses 32-bit throughout, producing different rounding.
+2. **Uninitialized delay lines:** Python `np.zeros()` initializes to zero. C stack arrays do not. The Dattorro algorithm has ~30,000 total delay samples across its 13 delay components -- that is ~120KB of float32 that must be zero-initialized.
+3. **Stack overflow on Daisy Seed:** 120KB of delay buffers on the stack will crash immediately. The STM32H750 on the Daisy Seed has limited stack (typically 8-16KB default). All delay line arrays must go in BSS (static) or SDRAM.
+4. **Modulo wrapping:** Python's `%` returns positive results for negative operands; C's `%` preserves the sign. The `DelayLine.read()` method computes `read_pos = self._write_index - delay` which can be negative. The C equivalent `read_pos % max_delay` will produce a negative index.
+5. **Math library differences:** `math.sin()` (Python) vs `sinf()` (C) vs `arm_sin_f32()` (CMSIS-DSP) produce slightly different results. The LFO in Dattorro uses `math.sin(self._lfo_phase)` per sample.
 
-**Consequences:** Audio blows up to infinity (clipping, distortion, speaker damage). On embedded hardware without overflow protection, this can cause hardware-level issues.
-
-**Prevention:**
-- Hard-clamp all feedback coefficients to `abs(g) < 0.999` in `update_params()`, regardless of what the parameter mapping computes
-- Derive feedback from RT60 using the correct formula, not by arbitrary scaling
-- The parameter mapping function from knob (0-100) to feedback should be tested at all 101 integer values to verify no value produces `g >= 1.0`
-- Add output clamping in `process()`: if any output sample exceeds [-1.0, 1.0], hard-clip and log a warning
-- In the base class, add a `_validate_coefficients()` called after every `update_params()`
-
-**Detection:** Set all "decay" or "room size" knobs to maximum (100). Process 30 seconds of audio. If output amplitude grows over time rather than staying bounded, feedback is too high.
-
-**Phase relevance:** Algorithm implementation. Must be verified before any listening tests are meaningful.
-
-**Confidence:** HIGH
-
----
-
-### Pitfall 5: Processing Full Files vs Block-Based Processing Mismatch
-
-**What goes wrong:** The Python workbench processes entire audio files at once (e.g., a 10-second clip as a single 480,000-sample array), but the Daisy Seed processes in 48-sample blocks. The algorithm works perfectly in Python but produces clicks, dropouts, or wrong output when ported to block-based C code.
-
-**Why it happens:** When processing the full buffer at once, developers use vectorized numpy operations that implicitly process all samples simultaneously. This hides bugs where state isn't properly carried between blocks. For example, a filter's internal state at the end of one block must be exactly the starting state for the next block.
-
-**Consequences:** The C port sounds different from the Python prototype. Debugging requires comparing sample-by-sample output between two completely different execution models.
+**Consequences:** C code that compiles but sounds different, crashes, or produces silence. Code that works in a desktop C test but fails on the actual Daisy Seed.
 
 **Prevention:**
-- The `process()` method must internally loop over BUFFER_SIZE (48) sample blocks, even when given a larger input
-- Implement a `_process_block(block)` method that handles exactly 48 samples, and have `process()` call it in a loop
-- This is the single most important architectural decision for C portability
-- Verify block-based equivalence: process audio as one big chunk vs. as sequential 48-sample blocks. Output must be bit-identical.
-- Add a test: `test_block_equivalence()` that splits audio into 48-sample blocks, processes them sequentially, concatenates results, and compares against processing the full audio
+- Generate code that uses `static` arrays for all delay lines (BSS segment, not stack). For Daisy Seed, use the SDRAM section annotation: `float buffer[SIZE] __attribute__((section(".sdram_bss")))`.
+- Use `memset(buf, 0, sizeof(buf))` in the init function.
+- For circular buffer indexing, use: `int idx = ((raw_idx % len) + len) % len;` or always keep indices positive with `if (idx < 0) idx += len;`.
+- Add a Python-side "C simulation" test: process audio using `np.float32` for ALL intermediates (wrap every arithmetic operation in `np.float32(...)`), not just state. Compare outputs sample-by-sample against the normal Python output.
+- Generate a test harness alongside the `.c`/`.h` files: a `main.c` that reads a WAV, processes it, writes a WAV. Compare this output against the Python output.
+- Match the Daisy Seed `AudioCallback` signature: `void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)`.
+- The existing C struct comments in `freeverb.py` and `dattorro_plate.py` are a good starting template but need to become actual generated code.
 
-**Detection:** Process the same audio in two modes: (1) as a single call to `process(full_audio)`, (2) as a loop of `process(block)` calls with 48-sample blocks. Diff the output. Any difference indicates state management bugs.
+**Detection:** Compile the generated C code as part of CI (even just `gcc -c` to verify compilation). Run the generated test harness and compare output WAV against Python reference. Any sample-level difference > 1e-4 is a red flag.
 
-**Phase relevance:** Must be the core architecture from Phase 1. Retrofitting block-based processing into a vectorized implementation is essentially a rewrite.
-
-**Confidence:** HIGH
-
----
-
-### Pitfall 6: Dattorro Plate Reverb Tank Modulation Errors
-
-**What goes wrong:** The Dattorro plate reverb uses modulated allpass filters in the tank section. Implementing the modulation wrong produces either: (1) no audible modulation (sounds static/metallic), (2) pitch-wobble artifacts, or (3) clicks from reading fractional delay positions without interpolation.
-
-**Why it happens:** Dattorro's 1997 paper specifies modulation depth and rate precisely, but the notation is dense and easy to misread. The modulated delay requires fractional delay line reads (linear or cubic interpolation), which adds complexity. Many implementations skip or simplify the modulation, producing a reverb that sounds thin and metallic compared to the paper's intended result.
-
-**Consequences:** The reverb sounds "digital" and harsh. The whole point of plate reverb is the lush, modulated decay -- without correct modulation it's just a mediocre feedback delay network.
-
-**Prevention:**
-- Implement a `ModulatedDelayLine` that extends `DelayLine` with fractional-sample read capability using linear interpolation (cubic is overkill for this application)
-- Use Dattorro's exact excursion values: max excursion of 16 samples at modulation frequencies of ~1 Hz (the paper specifies `f1 = 1.0 Hz`, `f2 = 0.7071 Hz` for the two modulated allpasses)
-- Fractional delay: `output = buffer[int_part] * (1 - frac) + buffer[int_part + 1] * frac` -- this is C-portable
-- Verify modulation by examining the spectrogram of the reverb tail of a click: it should show slight frequency smearing, not discrete spectral lines
-
-**Detection:** Process a click (impulse) through the plate reverb and examine the spectrogram of the tail. Without modulation, you'll see sharp horizontal lines (standing waves). With correct modulation, those lines should be slightly blurred/smeared.
-
-**Phase relevance:** Dattorro implementation phase. Getting the tank topology right first, then adding modulation.
-
-**Confidence:** HIGH (Dattorro's paper is extremely well-documented)
+**Confidence:** HIGH -- the project already enforces C-portability constraints in state types, but behavioral equivalence is an entirely separate problem.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: DC Offset Accumulation in Feedback Loops
+### Pitfall 5: Room/Chamber Reverbs Sounding Like Plate With Different Settings
 
-**What goes wrong:** After processing several seconds of audio, the reverb output develops a slowly growing DC offset that causes asymmetric clipping and a "pumping" sound.
+**What goes wrong:** New "Room" and "Chamber" algorithms end up being the Dattorro plate with tweaked delay lengths and decay times. They don't sound perceptually different -- they all have the same diffuse, metallic plate character.
 
-**Why it happens:** Tiny numerical biases in feedback paths accumulate over time. Float32 rounding is not symmetric. Each feedback iteration adds a tiny DC component that, over thousands of iterations, becomes audible.
+**Why it happens:** Room and chamber reverbs need early reflections that encode the geometry of a physical space. Plate reverbs deliberately avoid early reflections (a physical plate has no "walls"). Without a distinct early reflection pattern, all algorithmic reverbs collapse to "diffuse tail with different decay time." The current `DattorroPlate` has no early reflection section -- its 4 input allpass diffusers smear the input, which is the opposite of discrete early reflections.
 
 **Prevention:**
-- Add a simple DC-blocking filter at the output of each comb filter: `y[n] = x[n] - x[n-1] + 0.995 * y[n-1]`
-- This is a single-pole highpass at ~38 Hz (inaudible) that removes DC drift
-- The DC blocker is cheap (2 multiplies, 2 adds) and C-portable
-- Test by processing 60 seconds of silence after a short impulse -- the output should converge to exactly zero
+- Room/Chamber algorithms MUST have an explicit early reflection (ER) section before the diffuse tail. The ER section uses a tapped delay line with 6-20 taps at positions corresponding to wall reflections.
+- Use a structurally different architecture from Dattorro: Moorer's design (ER tapped delay -> mixing matrix -> late reverb via comb filters or FDN) is a natural fit and reuses existing `CombFilter` and `DelayLine` primitives.
+- Distinct character targets:
+  - Small room: ER delays 1-15ms, high ER density, RT60 0.3-0.8s, noticeable discrete echoes
+  - Large room: ER delays 5-40ms, lower density, RT60 0.8-2.5s, wider stereo
+  - Chamber: ER delays 3-20ms, very high density, smooth tail, RT60 0.5-1.5s
+- The parameter set should differ from Plate: "room size" controls ER pattern and tail length together. "Wall absorption" instead of "bandwidth." "Reflectivity" instead of "diffusion."
 
-**Detection:** Process audio, then measure the mean of the last 1 second of output. If it's significantly non-zero (> 1e-4), DC is accumulating.
+**Detection:** Generate impulse responses for Room, Chamber, and Plate with similar decay times. Compare the first 50ms in the time domain -- if they look the same (smooth onset), the Room/Chamber lacks early reflections. Room should show discrete spikes in the first 20-50ms.
 
-**Phase relevance:** Algorithm implementation. Add DC blockers during initial filter design, not as an afterthought.
-
-**Confidence:** HIGH
+**Confidence:** MEDIUM -- based on DSP literature and reverb design practice. The specific implementation details will need phase-specific research.
 
 ---
 
-### Pitfall 8: Ignoring the Wet/Dry Mix Implementation Details
+### Pitfall 6: Biquad EQ on Trails Causing DC Offset or Zipper Noise
 
-**What goes wrong:** The wet/dry mix sounds wrong -- either phase cancellation artifacts, volume jumps when adjusting the mix, or the "50% wet" setting doesn't sound like half reverb.
+**What goes wrong:** Inserting a biquad EQ post-reverb causes DC offset buildup, low-frequency rumble, or clicks/zips when parameters change during playback.
 
-**Why it happens:** Naive implementation `output = dry * (1-mix) + wet * mix` has two problems: (1) linear crossfade causes a perceived volume dip at 50% (should use equal-power: `dry * cos(mix * pi/2) + wet * sin(mix * pi/2)`), and (2) the wet signal may be out of phase or have latency relative to dry, causing comb filtering artifacts.
-
-**Consequences:** Users perceive the reverb as "hollow" or "thin" at intermediate mix settings. A/B comparison between dry and wet is unreliable.
+**Why it happens:**
+1. **DC offset:** The existing `DCBlocker` in `DattorroPlate` operates inside the reverb's tank. An EQ placed after the reverb (especially a low-shelf boost or parametric boost at low frequencies) can reintroduce DC or near-DC content.
+2. **Zipper noise:** The `Biquad.set_coefficients()` method updates coefficients instantly. During real-time playback, abrupt coefficient changes cause discontinuities in the output.
+3. **Filter ordering:** If someone mistakenly places EQ inside the reverb's feedback loop (rather than post-reverb), it changes the reverb character unpredictably and can cause instability.
 
 **Prevention:**
-- Use equal-power crossfade for the wet/dry mix
-- Ensure the dry signal passes through the same latency as the wet signal (even if it's zero-latency, document this)
-- Normalize wet signal level to approximately match dry signal RMS before mixing
-- Make 100% wet truly 100% wet (no dry signal) for analysis purposes
+- Place EQ strictly AFTER the reverb algorithm output, never inside the feedback path. In the signal chain: `audio -> reverb.process() -> eq.process() -> output`.
+- Add a `DCBlocker` after the EQ chain.
+- For real-time parameter changes, interpolate biquad coefficients over one block (48 samples). Calculate coefficients for old and new settings, process half the block with old coefficients and half with new, with a crossfade. Or simpler: just accept that coefficient updates happen at block boundaries (every 1ms), which produces at most a tiny click that is nearly inaudible.
+- Limit EQ boost range to +/-12 dB.
+- The existing `Biquad` class is correct and C-portable. No structural changes needed.
 
-**Detection:** Process a sine wave at 50% mix. If the output amplitude is noticeably lower than either 0% or 100%, you're using linear crossfade.
+**Detection:** Process 10 seconds of silence after a short impulse through reverb + EQ. Check that the final 1 second has max amplitude < 1e-6.
 
-**Phase relevance:** UI/playback implementation. Should be addressed when building the wet/dry control.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- the `Biquad` class exists and is tested. The risk is integration, not implementation.
 
 ---
 
-### Pitfall 9: Streamlit Audio Playback Limitations
+### Pitfall 7: Real-Time Parameter Changes Causing Audio Glitches
 
-**What goes wrong:** Streamlit's `st.audio()` widget doesn't support seamless A/B comparison, has limited format support, and reloads the entire page on parameter changes, making iterative tuning painful.
+**What goes wrong:** Changing algorithm parameters (knobs/switches) during real-time playback causes clicks, pops, or momentary silence.
 
-**Why it happens:** Streamlit re-runs the entire script on any widget interaction. This means: (1) audio processing runs again on every knob change (slow for complex algorithms), (2) playback position resets, making A/B comparison impossible, (3) no way to sync playback between two audio widgets.
+**Why it happens:** The current `update_params()` + `_scale_params()` pattern updates all internal coefficients atomically from Python's perspective, but in a multi-threaded real-time context, the audio callback thread may read partially-updated state. Additionally, some parameter changes are inherently discontinuous -- changing allpass feedback coefficients mid-stream changes the delay line contribution instantly.
 
-**Consequences:** The core workflow -- "tweak a knob, hear the difference" -- is frustratingly slow. Developers end up bypassing the UI and testing in scripts, defeating the purpose of the workbench.
+**Consequences for v1.1:** This is the #1 UX risk for real-time playback. Users expect to turn knobs and hear smooth changes. Clicks and pops make the tool feel broken.
 
 **Prevention:**
-- Use `st.cache_data` aggressively: cache audio loading, cache processing results keyed on (algorithm_name, params_hash, input_file_hash)
-- Use `st.session_state` to preserve playback state across reruns
-- Consider processing audio in a background thread and showing a progress indicator for long files
-- Keep test audio files short (2-5 seconds) for iteration; longer files for final evaluation only
-- Pre-process at multiple parameter settings and cache results so A/B switching is instant
-- Design the UI around "Process" button (explicit trigger) rather than auto-processing on every knob change
+- Use a double-buffer or lock-free parameter update: the UI thread writes new parameters to a "pending" snapshot (a plain dict of scalars). The audio callback checks for pending updates at the START of each block (not mid-block) and applies them atomically via `update_params()`.
+- Use a `queue.Queue(maxsize=1)` for parameter passing. The UI thread does `queue.put(params_dict)` (non-blocking). The audio callback does `queue.get_nowait()` at block start, ignoring `queue.Empty`.
+- For parameters that affect delay line lengths (pre_delay), crossfade between old and new delay lengths over one block rather than switching instantly.
+- Never call `reset()` when changing parameters during playback. `reset()` zeros all delay lines and causes a gap. The existing `update_params()` method correctly avoids this.
+- `BUFFER_SIZE=48` (1ms at 48 kHz) means parameter updates have at most 1ms latency, which is inaudible.
 
-**Detection:** Time how long it takes to change a parameter and hear the result. If it's more than 2 seconds, the iteration loop is too slow.
+**Detection:** Automate a test that changes parameters every 100ms during a 5-second sine wave and checks for discontinuities (sample-to-sample differences > 0.5).
 
-**Phase relevance:** UI implementation phase. Architectural decision that affects the entire UX.
-
-**Confidence:** MEDIUM (Streamlit behavior is well-known, but specific workarounds depend on version)
+**Confidence:** HIGH -- standard real-time audio engineering.
 
 ---
 
-### Pitfall 10: RT60 Measurement Implementation Errors
+### Pitfall 8: Thread Safety Between Streamlit and Audio Callback
 
-**What goes wrong:** RT60 measurements give wildly wrong values -- either negative, absurdly long (>30s for a small room reverb), or inconsistent between runs.
+**What goes wrong:** Race conditions between the Streamlit main thread and the `sounddevice` audio callback thread corrupt algorithm state or cause audio dropouts.
 
-**Why it happens:** RT60 requires Schroeder backward integration of the impulse response energy decay curve, then linear regression on the dB-scale decay. Common errors: (1) not using backward integration (forward integration gives wrong results), (2) fitting the regression to the wrong portion of the curve (noise floor corrupts the tail), (3) not handling the noise floor truncation point.
-
-**Consequences:** The primary metric for evaluating reverb quality is unreliable. Developers tune by ear because the numbers don't make sense, losing the quantitative advantage of the workbench.
+**Why it happens:** Python's GIL does not fully protect numpy array operations. If the UI thread triggers `algorithm.reset()` or `algorithm.update_params()` while the audio callback is in the middle of `algorithm._process_impl()`, the callback may read half-reset delay line buffers, producing a burst of noise or silence.
 
 **Prevention:**
-- Use Schroeder backward integration: `energy_decay[n] = sum(h[k]^2 for k = n to N)`
-- Convert to dB: `decay_dB = 10 * log10(energy_decay / energy_decay[0])`
-- Find the noise floor: where the decay curve levels off (derivative approaches zero)
-- Fit linear regression only to the range from 0 dB to 5 dB above the noise floor
-- RT60 = -60 / slope (extrapolated)
-- Validate against known reference: a comb filter with feedback `g` and delay `D` has RT60 = `-3 * D / (fs * log10(abs(g)))` -- compare analytical vs measured
-- Return T20 or T30 (extrapolated from -5 to -25 dB, or -5 to -35 dB range) rather than trying to measure a full 60 dB decay, which often hits the noise floor
+- The algorithm instance used by the audio callback must be SEPARATE from any instance used for analysis/visualization. The current `engine.process_audio()` creates a fresh instance each call -- this is fine for analysis but the real-time instance must be persistent.
+- The audio callback must NEVER acquire a blocking lock. Use lock-free communication:
+  - `queue.Queue(maxsize=1)` for parameter updates (UI -> audio)
+  - `queue.Queue` for status/metrics (audio -> UI)
+- Audio file data (the loaded WAV) should be loaded into a numpy array once and shared read-only. Both threads read from it; neither writes.
+- Store the real-time algorithm instance and audio stream in `st.session_state` so they persist across Streamlit reruns. Use a wrapper class that manages the sounddevice stream lifecycle.
 
-**Detection:** Measure RT60 of a simple comb filter where the analytical RT60 is known. If measured differs by more than 10%, the implementation is wrong.
+**Detection:** Run real-time playback for 60 seconds while rapidly changing parameters. Count buffer underruns (`sounddevice` reports these via the `status` argument to the callback). Any underruns indicate a threading or performance issue.
 
-**Phase relevance:** Analysis/metrics implementation phase.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- standard concurrent programming, verified via [sounddevice threading issue #187](https://github.com/spatialaudio/python-sounddevice/issues/187).
 
 ---
 
-### Pitfall 11: Allpass Filter "Not Actually Allpass" Implementation
+### Pitfall 9: Silence Padding Not Adapting to Algorithm/Parameters
 
-**What goes wrong:** The allpass filter doesn't have flat magnitude response -- it colors the sound instead of just diffusing it.
+**What goes wrong:** Silence padding is either too short (tail cut off) or too long (10x file size) because it uses a fixed duration rather than adapting to the actual RT60.
 
-**Why it happens:** The allpass filter topology requires a very specific sign convention. The transfer function is `H(z) = (-g + z^-D) / (1 - g*z^-D)`. Getting the signs wrong (e.g., `(g + z^-D) / (1 + g*z^-D)`) produces a filter that is NOT allpass -- it has magnitude response ripples.
-
-**Consequences:** The reverb has unwanted coloration that can't be fixed by adjusting other parameters. Developers waste hours tuning other parts of the algorithm to compensate for a broken fundamental building block.
+**Why it happens:** Different algorithms and parameter settings produce wildly different tail lengths. Freeverb with room_size=20 has a 0.3s tail; Dattorro with decay=95 has a 10s+ tail. A fixed padding of "3 seconds" is wrong for both.
 
 **Prevention:**
-- Implement the allpass as: `output = -g * input + buffer[read_pos]; buffer[write_pos] = input + g * output`
-- Verify allpass property: process white noise, compute magnitude spectrum -- it must be flat (within 0.1 dB across the spectrum)
-- The coefficient `g` controls diffusion amount (typically 0.5-0.7 for reverb allpasses)
-- Write a unit test: FFT of `output / input` for white noise should have constant magnitude
+- Calculate padding from the algorithm's measured RT60: `padding_samples = int(rt60 * 1.5 * SAMPLE_RATE)`. The 1.5x multiplier ensures the tail decays below audibility (-90 dB).
+- The existing `engine.process_audio()` already generates an impulse response and measures RT60 -- use that measurement to determine padding.
+- Cap maximum padding at 10 seconds to prevent runaway file sizes.
+- For real-time playback with loop mode, padding is irrelevant -- the algorithm state persists across loop boundaries. Only apply padding for process-then-play and file export.
 
-**Detection:** Process 10 seconds of white noise through a single allpass. Plot the magnitude spectrum of input vs output. They should be nearly identical (flat). Any peaks or notches indicate a sign error.
+**Detection:** Check that the last 100ms of padded output has energy below -80 dB relative to peak.
 
-**Phase relevance:** Filter primitives implementation -- must be correct before building any algorithm.
-
-**Confidence:** HIGH
+**Confidence:** HIGH -- straightforward engineering but easy to get wrong with hardcoded values.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 12: Stereo Reverb as "Two Mono Reverbs"
+### Pitfall 10: FDN Delay Line Lengths Causing Metallic Resonances
 
-**What goes wrong:** Stereo reverb sounds like two independent mono reverbs panned left and right, with no spatial connection. It lacks the "enveloping" quality of good stereo reverb.
+**What goes wrong:** The FDN sounds metallic or "ringy" instead of smooth and diffuse.
 
-**Prevention:**
-- Use cross-coupling between left and right channels in the feedback network
-- Dattorro's plate design inherently handles this with its figure-8 tank topology (two outputs tapped from a single recirculating network)
-- For Freeverb stereo: use slightly different delay lengths for L and R channels (Jezar uses a +23 sample offset for the right channel)
-- Test with mono input: the output should still be stereo with decorrelated L/R channels
+**Why it happens:** Delay line lengths share common factors, causing mode clustering. If delays are 1000, 2000, 3000, 4000 samples, their modes overlap at multiples of 48 Hz, creating an audible pitch.
 
-**Phase relevance:** Algorithm implementation, after mono is working correctly.
+**Prevention:** Use mutually prime delay lengths. Start from prime numbers near desired lengths. For a 4-channel FDN at 48 kHz: 1153, 1399, 1613, 1823 (all prime). For 8-channel: 887, 1013, 1153, 1327, 1499, 1613, 1823, 1987. The existing `Freeverb` and `DattorroPlate` already use carefully chosen non-coprime lengths from their reference papers -- FDN does not have established reference lengths.
 
-**Confidence:** HIGH
+**Confidence:** HIGH -- [CCRMA FDN reference](https://ccrma.stanford.edu/~jos/pasp/FDN_Reverberation.html).
 
 ---
 
-### Pitfall 13: Parameter Mapping Without Perceptual Scaling
+### Pitfall 11: Signal-Flow Diagram Rendering Blocking the UI
 
-**What goes wrong:** Turning the "room size" knob from 50 to 60 produces a huge change, but 0 to 10 produces almost no change. The knobs feel non-linear and unintuitive.
+**What goes wrong:** Generating signal-flow diagrams for complex algorithms (Dattorro has ~20 components) takes several seconds and blocks Streamlit.
 
-**Prevention:**
-- Use perceptually-scaled parameter mappings. Most audio parameters need logarithmic or exponential mapping.
-- Decay/room size: exponential mapping (`value = min + (max - min) * (knob/100)^2`)
-- Damping/tone: linear mapping is usually fine
-- Pre-delay: logarithmic mapping (humans perceive time ratios, not differences)
-- Document the mapping function for each parameter in the param_specs
-- Test all 101 knob positions (0-100) and verify the output changes smoothly with no sudden jumps
+**Prevention:** Pre-render signal-flow diagrams as static SVG/PNG per algorithm class, not per parameter set. The topology does not change with parameters -- only coefficients do. Generate once at app startup or commit pre-rendered images to the repo. Use matplotlib for rendering (already a dependency) rather than adding graphviz.
 
-**Phase relevance:** Algorithm parameter design, before tuning begins.
-
-**Confidence:** HIGH
+**Confidence:** MEDIUM -- depends on rendering approach.
 
 ---
 
-### Pitfall 14: Not Validating Impulse Responses Early
+### Pitfall 12: Multi-File Loading Exhausting Memory
 
-**What goes wrong:** Developers tune reverb by listening to music through it, which makes subtle problems hard to hear. They miss resonances, flutter echoes, and frequency coloration that would be immediately obvious in an impulse response.
+**What goes wrong:** Loading 4-5 audio files at 48 kHz with their processed outputs, impulse responses, and spectrograms exhausts available memory.
 
-**Prevention:**
-- Generate and visually inspect impulse responses FIRST, before any music-based listening
-- Check for: (1) smooth exponential decay envelope, (2) dense reflection pattern (no periodic "echoes"), (3) flat-ish frequency response in the reverb tail
-- Use the impulse response for all RT60/metric calculations
-- Compare your impulse response visually against published impulse responses of the same algorithm type
+**Prevention:** Set a maximum file duration (30 seconds). Only keep the currently selected file's processed output in memory. Reprocess when switching files (the processing is fast enough for process-then-play). Clear matplotlib figures after rendering.
 
-**Phase relevance:** Should be part of the test harness from the earliest algorithm work.
+**Confidence:** MEDIUM -- depends on typical file sizes.
 
-**Confidence:** HIGH
+---
+
+### Pitfall 13: Loop/Single-Shot Toggle Resetting Algorithm State
+
+**What goes wrong:** Toggling between loop and single-shot during real-time playback restarts the audio and loses the reverb tail.
+
+**Prevention:** Loop/single-shot only affects whether the file read position wraps to 0 at EOF. The algorithm state (delay lines, filters) must persist across loop boundaries. Never call `algorithm.reset()` on loop toggle. The reverb tail from the end of one loop iteration blends naturally into the beginning of the next.
+
+**Confidence:** HIGH -- straightforward but easy to get wrong.
+
+---
+
+### Pitfall 14: Dattorro Variants Exceeding the 6-Knob Constraint
+
+**What goes wrong:** Adding parameters for tank size, diffusion block count, modulation rate pushes past the 6-knob + 2-switch hardware constraint.
+
+**Prevention:** Each algorithm variant gets the same 6 knobs + 2 switches, but the knobs map to different internal parameters. `DattorroHall` might map knob 6 to "tank size" instead of "mod depth." The mapping is fixed per algorithm class. The existing `param_specs` property already defines this -- just ensure each variant class returns exactly 6 knobs and 2 switches.
+
+**Confidence:** HIGH -- hardware constraint from the Cleveland Audio Hothouse pedal's physical interface.
 
 ---
 
@@ -321,25 +265,27 @@ Mistakes that cause rewrites, inaudible output, or broken C portability.
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| DSP primitives (DelayLine, Comb, Allpass) | Circular buffer index bugs (#3), allpass sign errors (#11) | Exhaustive unit tests with impulse verification before building algorithms |
-| Freeverb implementation | Wrong delay lengths for 48 kHz (#1), float64 default (#2) | Scale from 44.1 kHz reference, enforce float32 from line 1 |
-| Dattorro Plate implementation | Modulation errors (#6), DC accumulation (#7) | Implement ModulatedDelayLine with interpolation, add DC blockers |
-| Block-based processing | Full-file vs block processing mismatch (#5) | Architect process() around 48-sample _process_block() from the start |
-| Parameter interface | Feedback instability at extreme settings (#4), non-perceptual mapping (#13) | Hard-clamp coefficients, test all 101 knob positions |
-| Streamlit UI | Slow iteration loop (#9), wet/dry mix issues (#8) | Aggressive caching, equal-power crossfade |
-| Analysis/metrics | RT60 measurement errors (#10) | Validate against known analytical results from simple filters |
-| C export (future) | Float32 divergence (#2), block processing mismatch (#5) | Already mitigated if float32 and block-based processing enforced from start |
+| Dattorro parameter variants | Pitfall 3 (topology breakage if scope creeps), Pitfall 14 (exceeding 6 knobs) | Stay within `_scale_params()` changes. New switch modes are safe. New topology is a separate class. |
+| Dattorro topology variants | Pitfall 3 (stability/character loss) | Treat as new algorithm classes. Independent tuning. Budget 2x expected time. Phase-specific research likely needed. |
+| FDN reverb | Pitfall 1 (matrix instability), Pitfall 10 (metallic resonances) | Use Householder matrix. Prime delay lengths. Automated energy-decay stability test. |
+| Room/Chamber reverb | Pitfall 5 (sounding like plate) | Mandatory early reflection section. Moorer architecture, not Dattorro derivative. Phase-specific research likely needed on ER patterns. |
+| Real-time playback | Pitfall 2 (Streamlit limitations), Pitfall 7 (parameter glitches), Pitfall 8 (thread safety) | sounddevice in background thread. Lock-free parameter passing via Queue. Separate algorithm instances for audio vs analysis. |
+| Biquad EQ on trails | Pitfall 6 (DC offset, zipper noise) | Post-reverb placement. DC blocker after EQ. Coefficient update at block boundaries only. |
+| C code export | Pitfall 4 (non-functional code) | Generate test harness. Static arrays for delay lines (SDRAM on Daisy). Positive-modulo indexing. Float32 behavioral test. |
+| Signal-flow diagrams | Pitfall 11 (UI blocking) | Pre-render as static images per algorithm class. |
+| Silence padding | Pitfall 9 (wrong padding length) | RT60-based adaptive padding with 10s cap. |
+| Multi-file loading | Pitfall 12 (memory), Pitfall 13 (loop state) | Duration cap, lazy processing, persist algorithm state across loops. |
 
 ---
 
-## Meta-Pitfall: Testing by Ear Alone
-
-The single most important meta-lesson for reverb development: **ears lie, metrics don't.** The entire point of this workbench is to combine listening with quantitative analysis. Every algorithm change should be evaluated both by listening AND by metrics (RT60, spectral analysis, impulse response shape). Developers who skip the metrics end up chasing subjective impressions and can't reproduce their own tuning decisions.
-
 ## Sources
 
-- Dattorro, J. (1997). "Effect Design Part 1: Reverberator and Other Filters." Journal of the Audio Engineering Society, 45(9), 660-684.
-- Jezar's Freeverb source code and documentation (public domain, ~2000)
-- Smith, J.O. "Physical Audio Signal Processing" - CCRMA Stanford (online textbook)
-- General DSP engineering knowledge (float32 behavior, circular buffers, filter stability)
-- Confidence note: All pitfalls are drawn from well-established DSP engineering principles that have not changed. Freeverb and Dattorro are 25+ year old algorithms with extensive community implementation experience. HIGH confidence in the domain knowledge despite inability to verify against current web sources.
+- [CCRMA FDN Reverberation -- Julius O. Smith](https://ccrma.stanford.edu/~jos/pasp/FDN_Reverberation.html)
+- [Dattorro "Effect Design Part 1" (1997 JAES paper)](https://ccrma.stanford.edu/~dattorro/EffectDesignPart1.pdf)
+- [KVR Forum: Dattorro reverb improvements](https://www.kvraudio.com/forum/viewtopic.php?t=564078)
+- [KVR Forum: FDN Reverb discussion](https://www.kvraudio.com/forum/viewtopic.php?t=123095)
+- [Dense Reverberation With Delay Feedback Matrices](https://www.researchgate.net/publication/336855119_Dense_Reverberation_With_Delay_Feedback_Matrices)
+- [Streamlit community: working with realtime audio](https://discuss.streamlit.io/t/experience-report-working-with-realtime-audio-in-streamlit/86637)
+- [sounddevice thread safety discussion](https://github.com/spatialaudio/python-sounddevice/issues/187)
+- [sounddevice API: NumPy streams](https://python-sounddevice.readthedocs.io/en/latest/api/streams.html)
+- [Efficient Optimization of FDN for Smooth Reverberation (2024)](https://arxiv.org/html/2402.11216v2)

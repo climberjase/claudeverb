@@ -1,197 +1,175 @@
 # Project Research Summary
 
-**Project:** ClaudeVerb — Python DSP Reverb Algorithm Workbench
-**Domain:** Algorithmic reverb development tool with C portability to STM32 Daisy Seed
-**Researched:** 2026-03-04
-**Confidence:** HIGH (DSP domain, architecture patterns); MEDIUM (Streamlit specifics, feature scope)
+**Project:** ClaudeVerb v1.1 -- Algorithms, Real-Time & C Export
+**Domain:** DSP reverb workbench with embedded hardware export target
+**Researched:** 2026-03-07
+**Confidence:** MEDIUM-HIGH
 
 ## Executive Summary
 
-ClaudeVerb is a Python-first algorithm development workbench for building and evaluating algorithmic reverbs at 48 kHz, with a hard constraint that all DSP code must port cleanly to C on the STM32 Daisy Seed (192 KB RAM). Experts build tools like this with a strict layered architecture: core DSP primitives and algorithms are isolated from analysis and UI, all audio flows through a single orchestration engine, and every algorithm is written against C-portability rules from day one (fixed-size circular buffers, float32 everywhere, block-based processing at 48 samples). The scientific Python stack (NumPy, SciPy, librosa, matplotlib, Streamlit) is the clear choice — mature, well-integrated, and zero-ambiguity.
+ClaudeVerb v1.1 extends a working Python DSP reverb workbench (v1.0: Freeverb + Dattorro Plate, Streamlit UI, 152 tests) with new reverb algorithms (FDN, Room, Chamber, Dattorro variants), real-time playback with live parameter tweaking, post-reverb EQ, signal-flow diagrams, and C code export targeting the Daisy Seed / Hothouse pedal. The existing codebase is well-structured with a registry-based algorithm discovery pattern, an ABC with auto-generated UI controls, and C-portability constraints already enforced. All new algorithms build exclusively on existing DSP primitives (DelayLine, CombFilter, AllpassFilter, Biquad, OnePole, DCBlocker) with only two new pip packages needed: graphviz for diagram rendering and Jinja2 for C code templates.
 
-The recommended approach is to build from the bottom up: DSP primitives first (DelayLine, CombFilter, AllpassFilter), then Freeverb as the first complete algorithm, then analysis metrics (RT60, DRR, C80), then the Engine orchestrator, then the Streamlit UI, then Dattorro Plate as the primary target algorithm. This order avoids retrofitting problems and ensures every component is testable in isolation before the UI exists. A minimal Streamlit UI should be stood up early — after Freeverb works — to enable listening-driven iteration.
+The recommended approach is a six-phase build that starts with foundation primitives (silence padding, TappedDelayLine, BiquadChain), then adds algorithms in dependency order (FDN first, then Room/Chamber which reuse FDN infrastructure), then integrates engine enhancements and UI features, and defers the two highest-risk features -- real-time playback and C export -- to later phases when all algorithms are stable. This ordering is driven by the dependency graph: Room/Chamber algorithms need FDN's late-reverb engine, C export needs finalized algorithm structures, and real-time playback benefits from stable algorithms that will not change underneath the audio thread.
 
-The two highest risks are both architectural and must be addressed from the first line of algorithm code: (1) enforcing float32 everywhere (not NumPy's default float64) to prevent Python-to-C numerical divergence, and (2) building process() around 48-sample _process_block() calls (not full-buffer vectorized operations) so block-based C behavior matches the Python prototype exactly. Both pitfalls require rewrites to fix retroactively. The Dattorro Plate implementation also carries significant complexity risk around modulated delay lines — this phase needs careful implementation against the 1997 paper's exact specifications.
+The key risks are: (1) FDN feedback matrix instability causing audio blowup -- mitigated by using mathematically guaranteed unitary matrices (Hadamard/Householder) with automated energy-decay tests; (2) Streamlit's rerun model fundamentally conflicting with continuous audio playback -- mitigated by running sounddevice in a background thread with lock-free parameter passing; (3) C export generating code that compiles but sounds different or crashes on hardware -- mitigated by generating test harnesses, using static arrays for delay buffers, and adding float32-precision behavioral tests. Real-time Streamlit integration is the lowest-confidence area and should be treated as experimental.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is unambiguous: NumPy + SciPy for all DSP computation, soundfile for audio I/O, librosa for analysis, matplotlib for visualization, and Streamlit for UI. Python 3.11 or 3.12 required. All are mature libraries with no real alternatives worth considering. The only gotcha is Streamlit's full-script-rerun execution model, which requires aggressive use of `st.session_state` and `st.cache_data` to avoid re-processing audio on every widget interaction.
+The existing stack (numpy, scipy, soundfile, sounddevice, librosa, matplotlib, Streamlit) is validated and unchanged. Only two new packages are needed.
 
-See `.planning/research/STACK.md` for full version table and pyproject.toml template.
+See `.planning/research/STACK.md` for full details.
 
 **Core technologies:**
-- **NumPy >=1.26**: All DSP computation, float32 arrays — the foundation of every operation
-- **SciPy >=1.12**: Filter design via `scipy.signal.butter` / `sosfilt`; second-order sections map directly to C biquad structs
-- **librosa >=0.10.1**: Mel spectrograms, STFT, spectral analysis — always pass `sr=48000` explicitly
-- **soundfile >=0.12**: Audio file I/O (WAV/FLAC) without ffmpeg dependency
-- **sounddevice >=0.4.6**: Local audio playback via PortAudio; Streamlit `st.audio()` handles in-browser
-- **matplotlib >=3.8**: Spectrogram and analysis plots via `st.pyplot(fig)` in Streamlit
-- **Streamlit >=1.35**: Complete UI framework; process-then-play workflow fits its rerun model well
-- **pytest >=8.0 + pytest-cov >=5.0**: Test runner with coverage; DSP code is highly testable with impulse/sine fixtures
-
-**Do not use:** PySide6/Qt (already deferred per project), torchaudio/torch (massive dependency, numpy covers it), pydub (ffmpeg dependency), numba (optimizes Python but algorithms must port to C), pyaudio (use sounddevice instead).
+- **graphviz** (>=0.20): Signal-flow diagram rendering -- DOT language handles complex feedback topologies (Dattorro tank loops, FDN matrix connections) that would require manual coordinate math in matplotlib. Requires `brew install graphviz` system dependency.
+- **Jinja2** (>=3.1): C code template engine -- already a transitive dependency of Streamlit; adding it explicitly for template-based C/C++ code generation. Templates look like C code with variable substitutions, making them reviewable.
+- **No new deps for algorithms or real-time**: All new reverb algorithms use existing primitives. Real-time playback uses existing sounddevice.
 
 ### Expected Features
 
 See `.planning/research/FEATURES.md` for full feature table and dependency graph.
 
-**Must have (table stakes — v1):**
-- Audio file loading with 3-5 bundled samples (drums, guitar, vocals, speech, impulse click)
-- Freeverb fully implemented with 6 knobs + 2 switches
-- Dattorro Plate algorithm fully implemented (primary target for guitar pedal use)
-- Process-then-play workflow with play/stop controls
-- Wet/dry mix slider (equal-power crossfade, not linear)
-- Mel spectrogram display (input vs. output, side by side)
-- RT60 measurement (broadband + per-band low/mid/high)
-- Impulse response generation and waveform display
-- Algorithm selector dropdown from registry
-- Algorithm state reset between runs (clear delay lines before each process call)
+**Must have (table stakes):**
+- Silence padding for reverb tails -- fixes audible cutoff and inaccurate analysis metrics
+- FDN reverb algorithm -- the third major reverb family; any serious workbench needs one
+- Biquad EQ on reverb trails -- 3-band parametric using existing Biquad class
+- C code export for Freeverb and Dattorro -- the deferred v1.0 promise
+- Dattorro parameter variant presets -- easy, high-impact exploration of existing topology
+- Multi-file loading with loop/single-shot toggle -- workflow improvement
 
-**Should have (high-value, low-effort — v1):**
-- DRR, C80, spectral centroid metrics (low complexity, directly useful for guitar pedal tuning)
-- FFT magnitude comparison plot (reveals comb filter resonances)
-- Parameter preset save/load (JSON per algorithm; prevents losing good settings)
-- C struct memory estimation display (validates Daisy Seed 192 KB feasibility early)
-- Audio waveform display (time-domain input + output)
+**Should have (differentiators):**
+- Room reverb (small/large) -- structurally different from plate, requires early reflections
+- Chamber reverb -- dense, smooth character for vocals/acoustic instruments
+- Signal-flow diagrams -- unique to a workbench tool; commercial reverbs hide topology
+- Real-time playback with live knobs -- transforms the workflow from process-then-play
+- C export via UI button with current settings baked in as defaults
 
-**Defer to v2:**
-- Side-by-side algorithm comparison (two-column UI layout complexity)
-- Parameter sensitivity analysis (automated sweep, high complexity)
-- Batch comparison report (more useful once 3+ algorithms exist)
-- IR waterfall/spectrogram (medium complexity, analysis luxury)
-- C code export / Daisy Seed deployment (explicitly deferred per PROJECT.md)
-- AU plugin comparison (explicitly deferred per PROJECT.md)
-- Real-time processing with live knob tweaking
+**Defer (v1.2+):**
+- Dattorro topology variants (modified tank structures) -- HIGH complexity, needs independent tuning
+- C export for FDN/Room/Chamber -- complex state structures need careful C mapping
+- Live microphone/instrument input -- massive scope increase
+- Visual algorithm designer / node editor -- far beyond workbench scope
 
 ### Architecture Approach
 
-ClaudeVerb uses a strict 5-layer architecture with unidirectional data flow: Streamlit UI → Engine (orchestrator) → [DSP Algorithms | Analysis | Audio I/O]. The Engine is the sole integration point — UI never calls algorithms or analysis directly, which keeps the processing pipeline fully testable without Streamlit. Every algorithm holds mutable state (delay lines, filter memory) and implements `_process_block(block)` internally; analysis functions are pure (no state). The C-portability constraint shapes everything: algorithms may only use fixed-size pre-allocated buffers in `_initialize()`, process() must never allocate, and float32 must be enforced throughout.
+The architecture extends v1.0's patterns: registry-based algorithm discovery, ABC with `param_specs` driving auto-generated UI, engine facade isolating DSP from Streamlit. New components slot in cleanly: algorithms in `algorithms/`, real-time engine in `audio/realtime.py`, C export in `export/`, diagrams in `diagrams/`. The critical new pattern is thread-safe parameter passing for real-time playback via atomic dict swap or `queue.Queue`, keeping the sounddevice audio thread fully decoupled from Streamlit reruns.
 
-See `.planning/research/ARCHITECTURE.md` for full data flow diagram, Streamlit caching patterns, and recommended directory structure.
+See `.planning/research/ARCHITECTURE.md` for full component map and data flow diagrams.
 
 **Major components:**
-1. **DSP Primitives** (`algorithms/filters.py`) — DelayLine, CombFilter, AllpassFilter, ModulatedDelayLine; the foundation everything else builds on
-2. **Algorithm Layer** (`algorithms/`) — ReverbAlgorithm ABC + ALGORITHM_REGISTRY + Freeverb + DattorroPlate; param_specs drives auto-generated UI controls
-3. **Analysis Layer** (`analysis/`) — Pure functions: `rt60()`, `drr()`, `c80()`, `spectral_centroid()`, `mel_spectrogram()`, `fft_magnitude()`, `generate_impulse_response()`
-4. **Engine** (`engine.py`) — Pipeline orchestrator: loads audio, runs algorithm, runs analysis, stores results in session state; the only class the UI calls
-5. **Streamlit UI** (`ui/app.py` + `ui/components.py`) — Renders controls (auto-generated from param_specs), spectrograms, metrics, audio player; thin layer over Engine
+1. **New algorithm files** (fdn_reverb.py, room_reverb.py, chamber_reverb.py, dattorro_variants.py) -- subclass ReverbAlgorithm, register in ALGORITHM_REGISTRY, zero UI code changes needed
+2. **audio/realtime.py** -- RealtimePlayer class wrapping sounddevice.OutputStream with persistent algorithm instance stored in st.session_state
+3. **export/c_codegen.py + templates/** -- Jinja2-based C code generation producing .h/.c files, main.cpp, and Makefile for Hothouse pedal
+4. **filters.py additions** -- TappedDelayLine (early reflections) and BiquadChain (post-reverb EQ), both C-portable
+5. **diagrams/signal_flow.py** -- renders algorithm topology as block diagrams via graphviz
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for full details and detection methods on 14 pitfalls.
+See `.planning/research/PITFALLS.md` for all 14 pitfalls with detection methods.
 
-1. **Float64 default will break C portability** — Enforce `np.float32` everywhere from the first line of algorithm code. NumPy defaults to float64; recursive filters accumulate rounding errors differently between precisions; the Python prototype sounds correct but the C port diverges. Fix in the base class: assert float32 on every process() entry.
-
-2. **Full-buffer vs block-based processing mismatch** — Process() must loop over 48-sample `_process_block()` calls internally, even for long files. Vectorized numpy processing of full buffers hides state management bugs that appear catastrophically in block-based C. Verify with `test_block_equivalence()` that processes full file and sequential blocks and diffs the output.
-
-3. **Wrong delay line lengths for 48 kHz** — Freeverb's canonical delay lengths are tuned for 44.1 kHz. Scale all lengths by `48000/44100 = 1.0884`, round to nearest prime to prevent modal buildup. Store as computed values from `_compute_delay_lengths(sample_rate)`, never hardcoded.
-
-4. **Circular buffer index bugs (off-by-one, modulo)** — Implement a single `DelayLine` class used by all algorithms. Write a unit test: process an impulse, verify it appears at exactly sample N in the output. Python's `-1 % 5 == 4` but C's `-1 % 5 == -1` — use `(index + 1) if (index + 1) < length else 0` to avoid modulo entirely.
-
-5. **Comb filter feedback instability at extreme parameters** — Hard-clamp all feedback coefficients to `abs(g) < 0.999` in `update_params()`. Test all 101 knob positions (0-100) and verify no setting produces `g >= 1.0`. Add output clamping with a warning log in process().
+1. **FDN feedback matrix instability** -- use Hadamard or Householder matrices (mathematically guaranteed unitary). Never construct from user parameters. Add automated energy-decay stability test.
+2. **Real-time audio in Streamlit** -- Streamlit cannot do streaming audio. Use sounddevice.OutputStream in a background thread with lock-free parameter passing. Accept that UI and audio are decoupled.
+3. **C export producing non-functional code** -- Python float64 intermediates vs C float32, uninitialized delay lines, stack overflow from large buffers, negative modulo. Use static arrays, memset, positive-modulo indexing, and generate a test harness.
+4. **Room/Chamber sounding like plate** -- without explicit early reflections (tapped delay line), all algorithmic reverbs collapse to "diffuse tail with different decay." Use Moorer architecture, not Dattorro derivative.
+5. **Dattorro topology modifications breaking stability** -- parameter variants are safe; topology variants are effectively new algorithms requiring independent tuning. Keep them separate.
 
 ## Implications for Roadmap
 
-Based on combined research, the architecture's explicit dependency graph and the pitfall severity matrix suggest the following phase structure. All phases should be gated on tests passing — the workbench is only trustworthy if its measurements are trustworthy.
+Based on research, suggested phase structure:
 
-### Phase 1: DSP Foundation
-**Rationale:** Architecture and pitfalls research agree: the DelayLine class must be built and exhaustively tested before any algorithm code. Circular buffer bugs and float32 violations here corrupt every downstream component. Cannot parallelize with anything.
-**Delivers:** `config.py`, `algorithms/base.py` (ReverbAlgorithm ABC, ReverbParams, ParamSpec), `algorithms/filters.py` (DelayLine, CombFilter, AllpassFilter with correct sign convention); all with unit tests including impulse verification.
-**Addresses:** Algorithm reset, parameter specs system, audio shape conventions ((N,) mono / (2,N) stereo float32)
-**Avoids:** Circular buffer index bugs (Pitfall 3), allpass sign errors (Pitfall 11), float64 default (Pitfall 2)
-**Research flag:** Standard DSP patterns — no phase research needed. Dattorro 1997 and Freeverb source are sufficient references.
+### Phase 1: Foundation Primitives
+**Rationale:** All subsequent phases depend on these building blocks. No modifications to existing code -- zero risk of breakage.
+**Delivers:** Silence padding utility, TappedDelayLine filter primitive, BiquadChain filter primitive, all with tests.
+**Addresses:** Silence padding (P1), EQ infrastructure (P1)
+**Avoids:** Pitfall 9 (wrong padding length -- implement RT60-adaptive padding from the start)
 
-### Phase 2: Audio I/O + Freeverb
-**Rationale:** First end-to-end audio path. Freeverb is the simpler algorithm and a well-documented reference implementation, making it the right first algorithm. Audio I/O is a prerequisite for any listening. Block-based processing must be architected into Freeverb from the start.
-**Delivers:** `audio/io.py` with auto-resample to 48 kHz; bundled sample files (clap, snare, guitar, speech, impulse); `algorithms/freeverb.py` fully implemented with 6 knobs + 2 switches; ALGORITHM_REGISTRY; `test_block_equivalence()` test.
-**Addresses:** Audio file loading, Freeverb algorithm, process-then-play kernel, algorithm selector
-**Avoids:** Sample-rate-dependent delay lengths (Pitfall 1), full-buffer vs block mismatch (Pitfall 5), feedback instability at extreme params (Pitfall 4)
-**Research flag:** Standard patterns — no phase research needed.
+### Phase 2: New Algorithms
+**Rationale:** Algorithms are the core deliverable and must stabilize before C export or real-time playback depend on them. FDN must come first because Room/Chamber reuse its late-reverb infrastructure.
+**Delivers:** FDN reverb, Room reverb (small/large), Chamber reverb, Dattorro parameter presets. All registered in ALGORITHM_REGISTRY with auto-generated UI.
+**Addresses:** FDN (P1), Room/Chamber (P2), Dattorro presets (P1)
+**Avoids:** Pitfall 1 (FDN matrix instability), Pitfall 5 (Room sounding like plate), Pitfall 10 (metallic FDN resonances), Pitfall 14 (exceeding 6-knob constraint)
 
-### Phase 3: Analysis Metrics
-**Rationale:** Analysis is independent of algorithms and can be built/tested in isolation using test signals with known analytical answers. RT60 implementation errors are a common failure mode — validate against analytical formulas before the UI uses these numbers. This phase gives the workbench its quantitative backbone.
-**Delivers:** `analysis/spectral.py` (mel_spectrogram, fft_magnitude, stft); `analysis/metrics.py` (rt60, drr, c80, spectral_centroid); `analysis/impulse.py` (generate_impulse_response); all validated against known analytical results.
-**Addresses:** RT60 measurement, DRR, C80, spectral centroid, mel spectrogram, FFT comparison, impulse response
-**Avoids:** RT60 measurement errors (Pitfall 10) — validate T20/T30 method against single comb filter with known analytical RT60
-**Research flag:** Standard signal processing — Schroeder backward integration is well-documented. No phase research needed.
+### Phase 3: Engine Enhancements
+**Rationale:** Integrates Phase 1 primitives into the processing pipeline. Modifies engine.py but changes are additive (new optional parameters).
+**Delivers:** Silence padding in process pipeline, EQ post-processing on wet signal, base class methods for signal flow and C export (concrete with None defaults).
+**Addresses:** EQ on trails (P1), silence padding integration
+**Avoids:** Pitfall 6 (DC offset from EQ -- place after reverb, add DCBlocker)
 
-### Phase 4: Engine + Minimal Streamlit UI
-**Rationale:** The Engine wires all prior phases together. Once Engine works, a minimal Streamlit UI can be stood up to enable listening-driven iteration — hearing the algorithm is the fastest feedback loop for reverb development. Process-then-play model with explicit "Process" button avoids Streamlit rerun performance pitfalls.
-**Delivers:** `engine.py` (full pipeline: load → algorithm → wet/dry mix → analysis → ProcessResult); `ui/app.py` with algorithm selector, param knobs/switches, Process button, st.audio() player, mel spectrogram panels, RT60 display; parameter preset save/load.
-**Addresses:** Process-then-play workflow, wet/dry mix control (equal-power crossfade), audio playback, spectrogram display, metric display, algorithm selection, preset save/load
-**Avoids:** Streamlit audio playback limitations (Pitfall 9) — aggressive caching, explicit Process button; wet/dry mix artifacts (Pitfall 8) — equal-power crossfade
-**Research flag:** Streamlit `st.audio()` numpy array support and caching behavior should be verified against current Streamlit docs at implementation time. MEDIUM confidence on these specifics.
+### Phase 4: UI Features and Visualization
+**Rationale:** Builds on Phase 3 engine changes. UI-only work with no DSP risk.
+**Delivers:** EQ controls in sidebar, multi-file loading, loop/single-shot toggle, signal-flow diagram display, algorithm signal_flow_description() implementations.
+**Addresses:** Multi-file loading (P1), loop toggle (P1), signal-flow diagrams (P2)
+**Avoids:** Pitfall 11 (diagram rendering blocking UI -- pre-render as static per algorithm class), Pitfall 12 (memory from multi-file -- cap duration, lazy processing)
 
-### Phase 5: Dattorro Plate Algorithm
-**Rationale:** The primary target algorithm for the guitar pedal goal. More complex than Freeverb due to the figure-8 tank topology and modulated delay lines. Infrastructure from Phases 1-4 must exist first — in particular the analysis tools to verify the reverb quality by impulse response inspection.
-**Delivers:** `algorithms/dattorro_plate.py` fully implemented including ModulatedDelayLine with linear interpolation, correct tank modulation per Dattorro 1997 paper; integrated into UI via ALGORITHM_REGISTRY.
-**Addresses:** Dattorro Plate algorithm, ModulatedDelayLine, stereo cross-coupling, C struct memory estimation
-**Avoids:** Dattorro modulation errors (Pitfall 6) — implement ModulatedDelayLine with fractional delay, verify via impulse response spectrogram showing frequency smearing; DC offset accumulation (Pitfall 7) — add DC-blocking filter at comb filter outputs; stereo as two independent mono reverbs (Pitfall 12) — use figure-8 tank topology
-**Research flag:** Dattorro 1997 paper (J. Audio Eng. Soc. 45(9)) is the canonical reference and highly detailed. Phase-level research not needed, but implementor must read the paper section on tank modulation carefully.
+### Phase 5: Real-Time Playback
+**Rationale:** The riskiest feature, isolated to its own phase. Benefits from all algorithms being stable. Requires careful Streamlit lifecycle management.
+**Delivers:** RealtimePlayer with sounddevice callback, live parameter tweaking, transport controls (play/stop/loop).
+**Addresses:** Real-time playback (P2)
+**Avoids:** Pitfall 2 (Streamlit limitations), Pitfall 7 (parameter glitches), Pitfall 8 (thread safety), Pitfall 13 (loop resetting state)
 
-### Phase 6: Extended Analysis + Comparison Features
-**Rationale:** After both algorithms work correctly, higher-value analysis features (waveform display, C memory estimation, audio waveform display) and comparison groundwork can be added. These are the "should have" differentiators that make the workbench genuinely useful for tuning.
-**Delivers:** Audio waveform display (input + output time domain); C struct memory estimation panel (X / 192 KB); FFT magnitude comparison overlay; batch metric display for multiple runs; export parameter documentation (knob mapping docs auto-generated from param_specs).
-**Addresses:** All "should have" features from FEATURES.md; export parameter documentation
-**Avoids:** Testing by ear alone (Meta-Pitfall) — quantitative metrics panels reinforce metric-first workflow
-**Research flag:** Standard patterns — no phase research needed.
+### Phase 6: C Export
+**Rationale:** Needs finalized algorithm structures. Template-based generation using Jinja2 targeting Hothouse pedal hardware.
+**Delivers:** C struct/process code generation for Freeverb + Dattorro (minimum), export UI button, memory estimation, Makefile template.
+**Uses:** Jinja2 templates, algorithm c_state_fields() methods
+**Avoids:** Pitfall 4 (non-functional C code -- generate test harness, use static arrays, positive modulo, float32 behavioral test)
 
 ### Phase Ordering Rationale
 
-- **Foundation before algorithms:** The DelayLine bug class (circular buffer, allpass sign, float32) corrupts everything downstream. Fixing these in isolation is 10x easier than debugging them through a complete algorithm.
-- **Freeverb before Plate:** Freeverb is well-documented and simpler; it validates the infrastructure before tackling Dattorro's more complex topology.
-- **Analysis before Engine:** Pure analysis functions can be unit-tested with known signals independent of any algorithm. Validating RT60 against an analytical formula from a simple comb filter is faster and more reliable than validating it against full Freeverb output.
-- **Engine before full UI:** The Engine makes the pipeline testable in pytest without Streamlit. This is the correct integration order — test the pipeline first, then add the UI surface on top.
-- **Early minimal UI:** Despite the formal ordering, a minimal Streamlit app should be stood up after Phase 2 Freeverb works, even before full analysis exists, to enable listening tests. Hearing the output is the fastest way to catch wrong delay lengths, tone coloration, and instability at extreme settings.
+- **Dependency-driven:** Room/Chamber depend on FDN infrastructure; C export depends on finalized algorithms; real-time playback benefits from stable algorithms.
+- **Risk isolation:** Real-time (Phase 5) and C export (Phase 6) are the highest-risk, highest-complexity features. Deferring them means the milestone delivers value even if they slip.
+- **Incremental testability:** Each phase produces independently testable outputs. Phases 1-2 are pure additions with zero risk of breaking v1.0.
+- **Pitfall avoidance:** Building algorithms before export means C codegen can be tested against known-good Python outputs. Building algorithms before real-time means the audio thread processes stable code.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 4 (Streamlit UI):** Streamlit `st.audio()` numpy array API and caching behavior evolves quickly; verify `st.audio(numpy_array, sample_rate=48000)` against current Streamlit docs before designing the playback component. MEDIUM confidence.
-- **Phase 5 (Dattorro Plate):** Implementor must work directly from Dattorro 1997 paper for the tank topology and modulation parameters. Dense notation — allocate extra implementation time.
+- **Phase 2 (Algorithms):** FDN delay length selection, Room reverb early reflection tap patterns, and Moorer architecture specifics need phase-level research. The DSP literature is well-established but implementation choices (N=4 vs N=8 FDN, specific tap positions for room geometry) require targeted investigation.
+- **Phase 5 (Real-Time):** Streamlit + sounddevice integration is poorly documented. The hybrid architecture (sounddevice thread + Streamlit UI) has sparse examples. Expect prototyping.
+- **Phase 6 (C Export):** Daisy Seed memory layout (SDRAM vs SRAM placement), libDaisy AudioCallback signature, and Hothouse knob/switch mapping need verification against current hardware SDK.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (DSP Foundation):** Circular buffers, biquad filters, and allpass topology are textbook DSP. No external research needed.
-- **Phase 2 (Freeverb):** Jezar's original implementation is public domain and widely documented. Scale delay lengths to 48 kHz, enforce float32.
-- **Phase 3 (Analysis):** Schroeder backward integration for RT60, ISO 3382 metrics — established signal processing literature.
+- **Phase 1 (Primitives):** Well-documented DSP building blocks. TappedDelayLine and BiquadChain are textbook.
+- **Phase 3 (Engine):** Additive changes to existing facade pattern. Straightforward.
+- **Phase 4 (UI):** Standard Streamlit widget patterns. No novel integration.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Mature, stable libraries; no ambiguity in choices. Version numbers are approximate — verify against PyPI at implementation time. |
-| Features | MEDIUM | Based on DSP domain expertise and reverb engineering practice, not live competitive analysis. Feature set is well-reasoned for the stated purpose. |
-| Architecture | HIGH | Layered architecture and C-portability patterns are established in embedded audio engineering. Streamlit-specific details (caching, st.audio) are MEDIUM — evolves quickly. |
-| Pitfalls | HIGH | All pitfalls drawn from 25+ year old, well-documented algorithms (Freeverb, Dattorro). Core DSP engineering principles are stable. |
+| Stack | HIGH | Only 2 new packages, both well-established. All algorithm work uses existing deps. |
+| Features | MEDIUM-HIGH | Feature set well-defined. Real-time Streamlit integration is LOW confidence. |
+| Architecture | HIGH | Extends proven v1.0 patterns. Component boundaries clear. Build order logical. |
+| Pitfalls | HIGH | DSP pitfalls well-documented in academic literature. Threading pitfalls standard. |
 
-**Overall confidence:** HIGH for DSP/architecture decisions; MEDIUM for UI tooling specifics.
+**Overall confidence:** MEDIUM-HIGH
 
 ### Gaps to Address
 
-- **Streamlit st.audio() numpy support:** Research noted MEDIUM confidence. Verify `st.audio(array, sample_rate=48000)` syntax against current Streamlit 1.35+ docs before Phase 4 implementation. Fallback: write float32 numpy array to a BytesIO buffer as WAV using soundfile.
-- **Exact pyproject.toml versions:** Version floor numbers in STACK.md are based on training data, not live PyPI. Run `pip install --upgrade` and record actual resolved versions before finalizing pyproject.toml.
-- **Dattorro modulation specifics:** The paper's notation for excursion values and LFO frequencies should be treated as the ground truth. No inference needed — just requires careful reading.
-- **Schroeder algorithm (stub):** The existing codebase has a Schroeder stub in `algorithms/`. This is neither Freeverb nor Dattorro Plate — its role in the roadmap is undefined by research. Treat as a future v2 algorithm; don't block on it.
-- **PySide6 migration:** The existing codebase uses PySide6 (pre-research). Research recommends migrating to Streamlit as the UI framework for v1. This represents a rewrite of the UI layer — the migration cost should be acknowledged in roadmap planning.
+- **Real-time Streamlit integration:** No established pattern for continuous audio playback alongside Streamlit's rerun model. Will require prototyping and possibly architectural compromise. Plan for this phase to take longer than estimated.
+- **C behavioral equivalence:** Python float64 intermediates vs C float32 will produce audible differences. Need to decide on acceptable tolerance and build verification tooling. No existing framework for this in the codebase.
+- **Room reverb early reflection patterns:** Specific tap positions for convincing room geometry simulation need targeted research. The Moorer (1979) paper provides the framework but actual tap values for "small room" vs "large room" need tuning by ear.
+- **Graphviz vs matplotlib for diagrams:** STACK.md recommends graphviz; ARCHITECTURE.md suggests matplotlib to avoid the dependency. Recommendation: use graphviz -- it is purpose-built for directed graphs and already added to deps.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Dattorro, J. (1997). "Effect Design Part 1: Reverberator and Other Filters." JAES 45(9), 660-684 — Plate reverb topology, tank modulation, allpass filter design
-- Jezar's Freeverb source code (public domain, ~2000) — Freeverb delay line lengths, comb/allpass topology
-- Smith, J.O. "Physical Audio Signal Processing" — CCRMA Stanford — RT60 formula, comb filter stability theory
-- ISO 3382 — RT60, C80, C50, DRR definitions
+- [CCRMA FDN Reverberation -- Julius O. Smith](https://ccrma.stanford.edu/~jos/pasp/FDN_Reverberation.html) -- FDN theory, mixing matrices, stability
+- [Dattorro "Effect Design Part 1" (1997)](https://ccrma.stanford.edu/~dattorro/EffectDesignPart1.pdf) -- plate reverb topology, tap positions, tuning
+- [sounddevice callback docs](https://python-sounddevice.readthedocs.io/) -- real-time audio threading
+- [Cleveland Music Co. Hothouse Examples](https://github.com/clevelandmusicco/HothouseExamples) -- C export target hardware specs
+- [libDaisy hardware abstraction](https://github.com/electro-smith/libDaisy) -- Daisy Seed API
 
 ### Secondary (MEDIUM confidence)
-- NumPy, SciPy, librosa, soundfile, matplotlib, Streamlit documentation — Stack recommendations based on training data knowledge of established library capabilities
-- Streamlit execution model and st.audio() API — training data, verify against current docs
+- [KVR Forum: Dattorro improvements](https://www.kvraudio.com/forum/viewtopic.php?t=564078) -- topology modification risks
+- [Signalsmith Audio: Let's Write A Reverb](https://signalsmith-audio.co.uk/writing/2021/lets-write-a-reverb/) -- practical FDN implementation
+- [FDNTB: Feedback Delay Network Toolbox (DAFx 2020)](https://dafx2020.mdw.ac.at/proceedings/papers/DAFx2020_paper_53.pdf) -- FDN optimization
+- [Streamlit community: real-time audio](https://discuss.streamlit.io/t/experience-report-working-with-realtime-audio-in-streamlit/86637) -- integration challenges
+- [Dragonfly Room Reverb Manual](https://michaelwillis.github.io/dragonfly-reverb/dragonfly-room-manual.html) -- early reflection + late reverb architecture
 
 ### Tertiary (LOW confidence)
-- Exact version numbers in STACK.md — approximate, based on training data; verify against PyPI before committing to pyproject.toml
-- Streamlit numpy audio playback specifics — version-dependent, needs verification at implementation time
+- [Efficient Optimization of FDN (2024)](https://arxiv.org/html/2402.11216v2) -- advanced FDN techniques, may not be needed for v1.1
 
 ---
-*Research completed: 2026-03-04*
+*Research completed: 2026-03-07*
 *Ready for roadmap: yes*
