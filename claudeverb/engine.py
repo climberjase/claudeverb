@@ -28,6 +28,30 @@ from claudeverb.audio.impulse import generate_impulse_response
 from claudeverb.config import SAMPLE_RATE
 
 
+def pad_with_silence(
+    audio: np.ndarray, seconds: float, sample_rate: int = SAMPLE_RATE
+) -> np.ndarray:
+    """Append silence to audio for reverb tail preservation.
+
+    Args:
+        audio: Input audio, mono (N,) or stereo (2, N), float32.
+        seconds: Duration of silence to append in seconds.
+        sample_rate: Sample rate in Hz.
+
+    Returns:
+        Audio with silence appended, same dtype as input.
+    """
+    n_pad = int(seconds * sample_rate)
+    if n_pad <= 0:
+        return audio
+    if audio.ndim == 1:
+        padding = np.zeros(n_pad, dtype=np.float32)
+        return np.concatenate([audio, padding])
+    else:
+        padding = np.zeros((audio.shape[0], n_pad), dtype=np.float32)
+        return np.concatenate([audio, padding], axis=1)
+
+
 def process_audio(
     algorithm_name: str, params: dict, audio: np.ndarray
 ) -> dict:

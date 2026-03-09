@@ -473,6 +473,82 @@ class Biquad:
         return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
 
     @classmethod
+    def low_shelf(
+        cls,
+        freq: float,
+        gain_db: float,
+        q: float = 0.707,
+        sample_rate: int = 48000,
+    ) -> Biquad:
+        """Create a low shelf biquad filter.
+
+        Boosts or cuts frequencies below the shelf transition frequency
+        using Bristow-Johnson Audio EQ Cookbook formulas.
+
+        Args:
+            freq: Shelf transition frequency in Hz.
+            gain_db: Boost/cut in dB below the shelf frequency.
+            q: Quality factor (0.707 = Butterworth slope).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        a_lin = 10.0 ** (gain_db / 40.0)
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        sin_w0 = math.sin(w0)
+        alpha = sin_w0 / (2.0 * q)
+        two_sqrt_a_alpha = 2.0 * math.sqrt(a_lin) * alpha
+
+        b0 = a_lin * ((a_lin + 1) - (a_lin - 1) * cos_w0 + two_sqrt_a_alpha)
+        b1 = 2.0 * a_lin * ((a_lin - 1) - (a_lin + 1) * cos_w0)
+        b2 = a_lin * ((a_lin + 1) - (a_lin - 1) * cos_w0 - two_sqrt_a_alpha)
+        a0 = (a_lin + 1) + (a_lin - 1) * cos_w0 + two_sqrt_a_alpha
+        a1 = -2.0 * ((a_lin - 1) + (a_lin + 1) * cos_w0)
+        a2 = (a_lin + 1) + (a_lin - 1) * cos_w0 - two_sqrt_a_alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
+    def high_shelf(
+        cls,
+        freq: float,
+        gain_db: float,
+        q: float = 0.707,
+        sample_rate: int = 48000,
+    ) -> Biquad:
+        """Create a high shelf biquad filter.
+
+        Boosts or cuts frequencies above the shelf transition frequency
+        using Bristow-Johnson Audio EQ Cookbook formulas.
+
+        Args:
+            freq: Shelf transition frequency in Hz.
+            gain_db: Boost/cut in dB above the shelf frequency.
+            q: Quality factor (0.707 = Butterworth slope).
+            sample_rate: Sample rate in Hz.
+
+        Returns:
+            Configured Biquad instance.
+        """
+        a_lin = 10.0 ** (gain_db / 40.0)
+        w0 = 2.0 * math.pi * freq / sample_rate
+        cos_w0 = math.cos(w0)
+        sin_w0 = math.sin(w0)
+        alpha = sin_w0 / (2.0 * q)
+        two_sqrt_a_alpha = 2.0 * math.sqrt(a_lin) * alpha
+
+        b0 = a_lin * ((a_lin + 1) + (a_lin - 1) * cos_w0 + two_sqrt_a_alpha)
+        b1 = -2.0 * a_lin * ((a_lin - 1) + (a_lin + 1) * cos_w0)
+        b2 = a_lin * ((a_lin + 1) + (a_lin - 1) * cos_w0 - two_sqrt_a_alpha)
+        a0 = (a_lin + 1) - (a_lin - 1) * cos_w0 + two_sqrt_a_alpha
+        a1 = 2.0 * ((a_lin - 1) - (a_lin + 1) * cos_w0)
+        a2 = (a_lin + 1) - (a_lin - 1) * cos_w0 - two_sqrt_a_alpha
+
+        return cls(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, sample_rate)
+
+    @classmethod
     def parametric(
         cls,
         freq: float,
