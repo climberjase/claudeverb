@@ -323,3 +323,79 @@ def test_output_clipped():
 
     assert np.all(output >= -1.0), "Output below -1.0"
     assert np.all(output <= 1.0), "Output above 1.0"
+
+
+# ---------------------------------------------------------------------------
+# Preset tests (06-02)
+# ---------------------------------------------------------------------------
+
+class TestPresets:
+    """Tests for Dattorro presets module."""
+
+    def test_all_presets_have_required_keys(self):
+        """Every preset has all required param keys."""
+        from claudeverb.algorithms.dattorro_presets import DATTORRO_PRESETS
+
+        required_keys = {
+            "decay", "bandwidth", "tank_damping", "diffusion",
+            "pre_delay", "mod_depth", "switch1", "switch2",
+        }
+        for name, params in DATTORRO_PRESETS.items():
+            assert set(params.keys()) == required_keys, \
+                f"Preset '{name}' has wrong keys: {set(params.keys())}"
+
+    def test_knob_values_in_range(self):
+        """Every preset's knob values are in 0-100 range."""
+        from claudeverb.algorithms.dattorro_presets import DATTORRO_PRESETS
+
+        knob_keys = ["decay", "bandwidth", "tank_damping", "diffusion",
+                     "pre_delay", "mod_depth"]
+        for name, params in DATTORRO_PRESETS.items():
+            for key in knob_keys:
+                assert 0 <= params[key] <= 100, \
+                    f"Preset '{name}' knob '{key}' = {params[key]} out of range"
+
+    def test_switch_values_valid(self):
+        """Every preset's switch values are in [-1, 0, 1]."""
+        from claudeverb.algorithms.dattorro_presets import DATTORRO_PRESETS
+
+        for name, params in DATTORRO_PRESETS.items():
+            for sw in ["switch1", "switch2"]:
+                assert params[sw] in (-1, 0, 1), \
+                    f"Preset '{name}' {sw} = {params[sw]} invalid"
+
+    def test_update_params_accepts_all_presets(self):
+        """DattorroPlate().update_params(preset) succeeds for all presets."""
+        from claudeverb.algorithms.dattorro_presets import DATTORRO_PRESETS
+        from claudeverb.algorithms.dattorro_plate import DattorroPlate
+
+        for name, params in DATTORRO_PRESETS.items():
+            plate = DattorroPlate()
+            plate.update_params(params)  # should not raise
+
+    def test_list_presets_sorted(self):
+        """list_presets() returns sorted list with >= 6 entries."""
+        from claudeverb.algorithms.dattorro_presets import list_presets
+
+        names = list_presets()
+        assert len(names) >= 6
+        assert names == sorted(names)
+
+    def test_all_presets_distinct(self):
+        """All presets have distinct parameter combinations."""
+        from claudeverb.algorithms.dattorro_presets import DATTORRO_PRESETS
+
+        seen = []
+        for name, params in DATTORRO_PRESETS.items():
+            frozen = tuple(sorted(params.items()))
+            assert frozen not in seen, f"Preset '{name}' is a duplicate"
+            seen.append(frozen)
+
+    def test_get_preset_returns_copy(self):
+        """get_preset() returns a copy, not a reference."""
+        from claudeverb.algorithms.dattorro_presets import get_preset
+
+        p1 = get_preset("Small Plate")
+        p2 = get_preset("Small Plate")
+        p1["decay"] = -999
+        assert p2["decay"] != -999
