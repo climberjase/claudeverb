@@ -13,7 +13,7 @@ Requirements for v1.1 milestone. Each maps to roadmap phases.
 - [ ] **ALGO-02**: User can apply Small Room reverb (tapped delay early reflections + FDN late reverb, short decay)
 - [ ] **ALGO-03**: User can apply Large Room reverb (tapped delay early reflections + FDN late reverb, long decay)
 - [ ] **ALGO-04**: User can apply Chamber reverb (dense diffusion, even decay, medium space character)
-- [ ] **ALGO-05**: User can select Dattorro parameter presets (Small Plate, Large Hall, Shimmer Pad, etc.) from dropdown
+- [x] **ALGO-05**: User can select Dattorro parameter presets (Small Plate, Large Hall, Shimmer Pad, etc.) from dropdown
 - [ ] **ALGO-06**: User can apply Dattorro topology variant with modified tank structure (single-loop tank)
 - [ ] **ALGO-07**: User can apply Dattorro topology variant with extended diffusion (triple-diffuser input)
 - [ ] **ALGO-08**: User can apply Dattorro topology variant with asymmetric tank (wider stereo)
@@ -25,7 +25,7 @@ Requirements for v1.1 milestone. Each maps to roadmap phases.
 
 ### Playback
 
-- [ ] **PLAY-01**: User can load multiple WAV files (4-5) from /samples and switch between them
+- [x] **PLAY-01**: User can load multiple WAV files (4-5) from /samples and switch between them
 - [ ] **PLAY-02**: User can toggle loop or single-shot playback per clip
 - [ ] **PLAY-03**: User can append configurable silence to input for reverb tail preservation
 - [ ] **PLAY-04**: User can play audio in real-time with live knob tweaking via sounddevice
@@ -84,13 +84,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALGO-02 | Phase 8 | Pending |
 | ALGO-03 | Phase 8 | Pending |
 | ALGO-04 | Phase 8 | Pending |
-| ALGO-05 | Phase 6 | Pending |
+| ALGO-05 | Phase 6 | Complete |
 | ALGO-06 | Phase 8 | Pending |
 | ALGO-07 | Phase 8 | Pending |
 | ALGO-08 | Phase 8 | Pending |
 | EQ-01 | Phase 6 | Pending |
 | EQ-02 | Phase 6 | Pending |
-| PLAY-01 | Phase 6 | Pending |
+| PLAY-01 | Phase 6 | Complete |
 | PLAY-02 | Phase 6 | Pending |
 | PLAY-03 | Phase 6 | Pending |
 | PLAY-04 | Phase 10 | Pending |
