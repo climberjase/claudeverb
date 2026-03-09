@@ -7,10 +7,15 @@ All generated signals are float32 at SAMPLE_RATE (48 kHz).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from scipy.signal import chirp, butter, sosfilt
 
 from claudeverb.config import SAMPLE_RATE
+
+# Path to the bundled WAV samples directory
+_SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 
 
 # ---------------------------------------------------------------------------
@@ -226,17 +231,36 @@ SAMPLE_REGISTRY: dict[str, callable] = {
 
 
 def get_sample(name: str) -> np.ndarray:
-    """Look up a sample by name in the registry and generate it.
+    """Look up a sample by name and generate or load it.
+
+    Supports both synthesized samples (from SAMPLE_REGISTRY) and WAV files
+    from the samples directory (names ending with " [WAV]").
 
     Args:
-        name: Sample name (e.g. "impulse", "drum", "guitar").
+        name: Sample name (e.g. "impulse", "drum", "audio1-acoustic [WAV]").
 
     Returns:
-        Float32 ndarray of the generated sample.
+        Float32 ndarray of the sample audio.
 
     Raises:
-        ValueError: If name is not in the registry.
+        ValueError: If name is not in the registry and not a valid WAV sample.
     """
+    # WAV file path handling
+    if name.endswith(" [WAV]"):
+        stem = name[: -len(" [WAV]")]
+        wav_path = _SAMPLES_DIR / f"{stem}.wav"
+        if not wav_path.exists():
+            raise ValueError(
+                f"Unknown sample '{name}'. WAV file not found: {wav_path}"
+            )
+        from claudeverb.audio.io import load
+
+        audio = load(str(wav_path))
+        # If stereo, return left channel (mono) for consistency with synthesized samples
+        if audio.ndim == 2:
+            audio = audio[0]
+        return audio
+
     if name not in SAMPLE_REGISTRY:
         raise ValueError(
             f"Unknown sample '{name}'. Available: {sorted(SAMPLE_REGISTRY.keys())}"
@@ -245,5 +269,30 @@ def get_sample(name: str) -> np.ndarray:
 
 
 def list_samples() -> list[str]:
-    """Return sorted list of all available sample names."""
+    """Return sorted list of all synthesized sample names."""
     return sorted(SAMPLE_REGISTRY.keys())
+
+
+def list_wav_samples() -> list[str]:
+    """Return sorted list of WAV file stems in the samples directory.
+
+    Returns:
+        List of stem names (e.g. ["audio1-acoustic", "audio1-bass", ...]).
+    """
+    if not _SAMPLES_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in _SAMPLES_DIR.glob("*.wav"))
+
+
+def list_all_samples() -> list[str]:
+    """Return sorted list of all available samples (synthesized + WAV).
+
+    WAV samples are labeled with " [WAV]" suffix to distinguish them
+    from synthesized samples.
+
+    Returns:
+        Sorted list combining synthesized names and WAV names with labels.
+    """
+    synth = list(SAMPLE_REGISTRY.keys())
+    wav = [f"{stem} [WAV]" for stem in list_wav_samples()]
+    return sorted(synth + wav)
