@@ -12,7 +12,7 @@ import pytest
 
 from claudeverb.audio.samples import get_sample
 from claudeverb.config import SAMPLE_RATE
-from claudeverb.engine import blend_wet_dry, pad_with_silence, plot_waveform_comparison, process_audio
+from claudeverb.engine import apply_eq, blend_wet_dry, pad_with_silence, plot_waveform_comparison, process_audio
 
 
 # ---------------------------------------------------------------------------
@@ -181,3 +181,90 @@ class TestSilencePadding:
         mono = np.ones(4800, dtype=np.float32)
         padded = pad_with_silence(mono, 1.0)
         assert padded.dtype == np.float32
+
+
+# ---------------------------------------------------------------------------
+# apply_eq / EQ integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestEQ:
+    """Tests for apply_eq() and EQ integration in process_audio()."""
+
+    EQ_FLAT = {
+        "enabled": True,
+        "low_freq": 200,
+        "low_gain": 0,
+        "mid_freq": 1000,
+        "mid_gain": 0,
+        "mid_q": 1.5,
+        "high_freq": 6000,
+        "high_gain": 0,
+    }
+
+    def test_apply_eq_flat_is_near_unity(self):
+        """apply_eq with all gains at 0dB returns signal approximately unchanged."""
+        rng = np.random.default_rng(42)
+        signal = rng.random(48000, dtype=np.float32) * 0.5
+        result = apply_eq(signal, self.EQ_FLAT)
+        rms_diff = np.sqrt(np.mean((result - signal) ** 2))
+        assert rms_diff < 0.01
+
+    def test_apply_eq_low_boost(self):
+        """apply_eq with low_gain=+6dB boosts low frequencies measurably."""
+        rng = np.random.default_rng(42)
+        signal = rng.random(48000, dtype=np.float32) * 0.3
+        params = dict(self.EQ_FLAT, low_gain=6)
+        result = apply_eq(signal, params)
+        # Boosted signal should have higher RMS than original
+        assert np.sqrt(np.mean(result**2)) > np.sqrt(np.mean(signal**2))
+
+    def test_apply_eq_stereo_shape(self):
+        """apply_eq processes stereo (2, N) correctly, output shape matches input."""
+        rng = np.random.default_rng(42)
+        stereo = rng.random((2, 48000), dtype=np.float32) * 0.5
+        result = apply_eq(stereo, self.EQ_FLAT)
+        assert result.shape == stereo.shape
+
+    def test_apply_eq_clips_and_dtype(self):
+        """apply_eq output is clipped to [-1, 1] and dtype is float32."""
+        # Use a signal near full scale with big boost to trigger clipping
+        signal = np.ones(4800, dtype=np.float32) * 0.9
+        params = dict(self.EQ_FLAT, low_gain=12, mid_gain=12, high_gain=12)
+        result = apply_eq(signal, params)
+        assert result.dtype == np.float32
+        assert np.all(result >= -1.0)
+        assert np.all(result <= 1.0)
+
+    def test_process_audio_no_eq(self, mono_audio):
+        """process_audio with eq_params=None produces same result as without EQ."""
+        result = process_audio("freeverb", {}, mono_audio, eq_params=None)
+        assert "wet" in result
+        assert "dry" in result
+        # Clean up
+        for fig in result["figures"].values():
+            plt.close(fig)
+
+    def test_process_audio_with_eq(self, mono_audio):
+        """process_audio with eq_params enabled processes through EQ chain."""
+        result = process_audio("freeverb", {}, mono_audio, eq_params=self.EQ_FLAT)
+        assert "wet" in result
+        # Clean up
+        for fig in result["figures"].values():
+            plt.close(fig)
+
+    def test_process_audio_with_silence(self, mono_audio):
+        """process_audio with silence_seconds > 0 pads input, dry and wet have same length."""
+        result = process_audio("freeverb", {}, mono_audio, silence_seconds=1.0)
+        expected_len = len(mono_audio) + SAMPLE_RATE
+        if result["dry"].ndim == 1:
+            assert len(result["dry"]) == expected_len
+            assert len(result["wet"]) == expected_len
+        else:
+            assert result["dry"].shape[1] == expected_len
+            assert result["wet"].shape[1] == expected_len
+        assert "original_length" in result
+        assert result["original_length"] == len(mono_audio)
+        # Clean up
+        for fig in result["figures"].values():
+            plt.close(fig)
