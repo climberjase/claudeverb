@@ -179,3 +179,64 @@ class TestBiquadBehavior:
         bq.reset()
         assert float(bq.d1) == 0.0
         assert float(bq.d2) == 0.0
+
+
+class TestBiquadLowShelf:
+    """Low shelf filter frequency response tests."""
+
+    def test_boost_below_shelf(self):
+        """low_shelf(200, 6.0) boosts frequencies below 200 Hz by ~6dB."""
+        bq = Biquad.low_shelf(200, 6.0)
+        gain_50 = _magnitude_db(bq, 50)
+        gain_10k = _magnitude_db(bq, 10000)
+        # 50 Hz should be boosted ~6dB relative to 10 kHz (passband ~0dB)
+        assert gain_50 == pytest.approx(6.0, abs=1.5)
+        assert gain_10k == pytest.approx(0.0, abs=1.0)
+
+    def test_cut_below_shelf(self):
+        """low_shelf(200, -6.0) cuts frequencies below 200 Hz by ~6dB."""
+        bq = Biquad.low_shelf(200, -6.0)
+        gain_50 = _magnitude_db(bq, 50)
+        gain_10k = _magnitude_db(bq, 10000)
+        assert gain_50 == pytest.approx(-6.0, abs=1.5)
+        assert gain_10k == pytest.approx(0.0, abs=1.0)
+
+    def test_unity_at_zero_gain(self):
+        """low_shelf(200, 0.0) passes signal unchanged (unity gain)."""
+        bq = Biquad.low_shelf(200, 0.0)
+        gain_50 = _magnitude_db(bq, 50)
+        gain_1k = _magnitude_db(bq, 1000)
+        gain_10k = _magnitude_db(bq, 10000)
+        assert gain_50 == pytest.approx(0.0, abs=0.1)
+        assert gain_1k == pytest.approx(0.0, abs=0.1)
+        assert gain_10k == pytest.approx(0.0, abs=0.1)
+
+
+class TestBiquadHighShelf:
+    """High shelf filter frequency response tests."""
+
+    def test_boost_above_shelf(self):
+        """high_shelf(6000, 6.0) boosts frequencies above 6 kHz by ~6dB."""
+        bq = Biquad.high_shelf(6000, 6.0)
+        gain_200 = _magnitude_db(bq, 200)
+        gain_20k = _magnitude_db(bq, 20000)
+        assert gain_20k == pytest.approx(6.0, abs=1.5)
+        assert gain_200 == pytest.approx(0.0, abs=1.0)
+
+    def test_cut_above_shelf(self):
+        """high_shelf(6000, -6.0) cuts frequencies above 6 kHz by ~6dB."""
+        bq = Biquad.high_shelf(6000, -6.0)
+        gain_200 = _magnitude_db(bq, 200)
+        gain_20k = _magnitude_db(bq, 20000)
+        assert gain_20k == pytest.approx(-6.0, abs=1.5)
+        assert gain_200 == pytest.approx(0.0, abs=1.0)
+
+    def test_unity_at_zero_gain(self):
+        """high_shelf(6000, 0.0) passes signal unchanged (unity gain)."""
+        bq = Biquad.high_shelf(6000, 0.0)
+        gain_200 = _magnitude_db(bq, 200)
+        gain_1k = _magnitude_db(bq, 1000)
+        gain_20k = _magnitude_db(bq, 20000)
+        assert gain_200 == pytest.approx(0.0, abs=0.1)
+        assert gain_1k == pytest.approx(0.0, abs=0.1)
+        assert gain_20k == pytest.approx(0.0, abs=0.1)

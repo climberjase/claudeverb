@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 
 from claudeverb.audio.samples import get_sample
-from claudeverb.engine import blend_wet_dry, plot_waveform_comparison, process_audio
+from claudeverb.config import SAMPLE_RATE
+from claudeverb.engine import blend_wet_dry, pad_with_silence, plot_waveform_comparison, process_audio
 
 
 # ---------------------------------------------------------------------------
@@ -138,3 +139,45 @@ class TestPlotWaveformComparison:
         fig = plot_waveform_comparison(dry, wet)
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# pad_with_silence tests
+# ---------------------------------------------------------------------------
+
+
+class TestSilencePadding:
+    """Tests for pad_with_silence() utility."""
+
+    def test_mono_padding_length(self):
+        """pad_with_silence(mono, 2.0) returns array with length = original + 96000."""
+        mono = np.ones(4800, dtype=np.float32)
+        padded = pad_with_silence(mono, 2.0)
+        expected_len = 4800 + int(2.0 * SAMPLE_RATE)
+        assert len(padded) == expected_len
+
+    def test_stereo_padding_shape(self):
+        """pad_with_silence(stereo, 2.0) returns (2, original+96000) shape."""
+        stereo = np.ones((2, 4800), dtype=np.float32)
+        padded = pad_with_silence(stereo, 2.0)
+        expected_cols = 4800 + int(2.0 * SAMPLE_RATE)
+        assert padded.shape == (2, expected_cols)
+
+    def test_zero_seconds_passthrough(self):
+        """pad_with_silence(mono, 0.0) returns original array unchanged."""
+        mono = np.ones(4800, dtype=np.float32)
+        padded = pad_with_silence(mono, 0.0)
+        np.testing.assert_array_equal(padded, mono)
+
+    def test_padded_region_is_zeros(self):
+        """Appended region is all zeros."""
+        mono = np.ones(4800, dtype=np.float32)
+        padded = pad_with_silence(mono, 1.0)
+        padding_region = padded[4800:]
+        assert np.all(padding_region == 0.0)
+
+    def test_dtype_preserved(self):
+        """Padded output is float32."""
+        mono = np.ones(4800, dtype=np.float32)
+        padded = pad_with_silence(mono, 1.0)
+        assert padded.dtype == np.float32
