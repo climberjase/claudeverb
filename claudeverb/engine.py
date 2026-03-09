@@ -211,7 +211,10 @@ def blend_wet_dry(
 
 
 def plot_waveform_comparison(
-    dry: np.ndarray, wet: np.ndarray, sr: int = SAMPLE_RATE
+    dry: np.ndarray,
+    wet: np.ndarray,
+    sr: int = SAMPLE_RATE,
+    padding_start_sample: int | None = None,
 ) -> plt.Figure:
     """Create a two-panel waveform comparison plot.
 
@@ -222,6 +225,8 @@ def plot_waveform_comparison(
         dry: Input audio, mono (N,) or stereo (2, N), float32.
         wet: Output audio, mono (N,) or stereo (2, N), float32.
         sr: Sample rate in Hz.
+        padding_start_sample: If provided, shade the region from this sample
+            index to the end with light gray to indicate silence padding.
 
     Returns:
         matplotlib Figure with two subplots. Caller is responsible for closing.
@@ -245,6 +250,19 @@ def plot_waveform_comparison(
     axes[1].set_ylabel("Amplitude")
     axes[1].set_xlabel("Time (s)")
     axes[1].set_ylim(-1, 1)
+
+    # Shade padding region if padding was applied
+    if padding_start_sample is not None:
+        total_samples = max(len(dry_mono), len(wet_mono))
+        if padding_start_sample < total_samples:
+            boundary_s = padding_start_sample / sr
+            end_s = total_samples / sr
+            for ax in axes:
+                ax.axvspan(
+                    boundary_s, end_s,
+                    alpha=0.15, color="gray", label="Padding",
+                )
+            axes[0].legend(loc="upper right", fontsize="small")
 
     fig.tight_layout()
     return fig
