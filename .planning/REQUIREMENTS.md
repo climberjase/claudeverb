@@ -26,7 +26,7 @@ Requirements for v1.1 milestone. Each maps to roadmap phases.
 ### Playback
 
 - [x] **PLAY-01**: User can load multiple WAV files (4-5) from /samples and switch between them
-- [ ] **PLAY-02**: User can toggle loop or single-shot playback per clip
+- [x] **PLAY-02**: User can toggle loop or single-shot playback per clip
 - [x] **PLAY-03**: User can append configurable silence to input for reverb tail preservation
 - [ ] **PLAY-04**: User can play audio in real-time with live knob tweaking via sounddevice
 - [ ] **PLAY-05**: User can start/stop real-time playback with transport controls
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EQ-01 | Phase 6 | Complete |
 | EQ-02 | Phase 6 | Complete |
 | PLAY-01 | Phase 6 | Complete |
-| PLAY-02 | Phase 6 | Pending |
+| PLAY-02 | Phase 6 | Complete |
 | PLAY-03 | Phase 6 | Complete |
 | PLAY-04 | Phase 10 | Pending |
 | PLAY-05 | Phase 10 | Pending |
