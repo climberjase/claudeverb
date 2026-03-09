@@ -1,104 +1,78 @@
 # Requirements: ClaudeVerb
 
-**Defined:** 2026-03-04
+**Defined:** 2026-03-07
 **Core Value:** A developer can hear and visually analyze reverb algorithm output, tweak parameters, and iterate rapidly — ears and metrics together.
 
-## v1 Requirements
+## v1.1 Requirements
 
-Requirements for initial release. Each maps to roadmap phases.
-
-### Audio I/O
-
-- [x] **AIO-01**: User can load audio files from disk (WAV/AIFF) with automatic resampling to 48 kHz
-- [x] **AIO-02**: Workbench ships with bundled test samples (dry drums, guitar, vocals, impulse click)
-- [x] **AIO-03**: User can play, stop, and loop processed audio output
-- [x] **AIO-04**: User can generate an impulse response from any algorithm with current parameters
-
-### DSP Foundation
-
-- [x] **DSP-01**: Comb filter primitive with fixed-size circular buffer delay line
-- [x] **DSP-02**: Allpass filter primitive with fixed-size circular buffer delay line
-- [x] **DSP-03**: Delay line primitive (circular buffer, no dynamic allocation after init)
-- [x] **DSP-04**: EQ filter primitives: high-pass, low-pass, notch, bandpass, parametric boost/cut
-- [x] **DSP-05**: All algorithm state representable as fixed-size C arrays and scalars (no Python objects in hot path)
-- [x] **DSP-06**: All audio processed as float32 in [-1.0, 1.0], mono (N,) or stereo (2, N)
-- [x] **DSP-07**: Block-based processing with BUFFER_SIZE=48 samples internally
+Requirements for v1.1 milestone. Each maps to roadmap phases.
 
 ### Algorithms
 
-- [x] **ALG-01**: Freeverb algorithm (Jezar's Schroeder-Moorer: 8 comb + 4 allpass per channel) with 6 knobs and 2 switches
-- [x] **ALG-02**: Dattorro Plate reverb algorithm (figure-eight tank topology) with 6 knobs and 2 switches
-- [x] **ALG-03**: Each algorithm exposes param_specs defining knob ranges (0-100) and switch positions (-1, 0, 1)
-- [x] **ALG-04**: Algorithm registry with dropdown selection in UI
-- [x] **ALG-05**: Algorithm reset clears all internal state (delay lines, filter state) between parameter changes
-- [x] **ALG-06**: Delay line lengths scaled for 48 kHz (not 44.1 kHz reference values)
+- [ ] **ALGO-01**: User can apply FDN reverb (4-channel Hadamard, coprime delays, per-band decay) to audio
+- [ ] **ALGO-02**: User can apply Small Room reverb (tapped delay early reflections + FDN late reverb, short decay)
+- [ ] **ALGO-03**: User can apply Large Room reverb (tapped delay early reflections + FDN late reverb, long decay)
+- [ ] **ALGO-04**: User can apply Chamber reverb (dense diffusion, even decay, medium space character)
+- [ ] **ALGO-05**: User can select Dattorro parameter presets (Small Plate, Large Hall, Shimmer Pad, etc.) from dropdown
+- [ ] **ALGO-06**: User can apply Dattorro topology variant with modified tank structure (single-loop tank)
+- [ ] **ALGO-07**: User can apply Dattorro topology variant with extended diffusion (triple-diffuser input)
+- [ ] **ALGO-08**: User can apply Dattorro topology variant with asymmetric tank (wider stereo)
 
-### Processing & Playback
+### EQ & Signal Chain
 
-- [x] **PLAY-01**: Process-then-play workflow: user tweaks parameters, clicks process, listens to result
-- [x] **PLAY-02**: Wet/dry mix slider (0-100%) applied at output stage, not inside algorithm
-- [x] **PLAY-03**: Audio waveform display showing input and output amplitude envelopes with reverb tail visible
+- [ ] **EQ-01**: User can enable/disable post-reverb Biquad EQ on reverb trails
+- [ ] **EQ-02**: User can adjust 3-band EQ parameters (low shelf, mid parametric, high shelf) with frequency, Q, and gain controls
 
-### Analysis
+### Playback
 
-- [x] **ANLY-01**: Mel spectrogram visualization comparing input vs. processed output (side-by-side or overlay)
-- [x] **ANLY-02**: RT60 measurement via Schroeder backward integration — broadband plus per-band (low/mid/high)
-- [x] **ANLY-03**: DRR (Direct-to-Reverberant Ratio) computed from impulse response
-- [x] **ANLY-04**: C80 and C50 clarity metrics computed from impulse response
-- [x] **ANLY-05**: Spectral centroid comparison (input vs. output delta)
-- [x] **ANLY-06**: FFT magnitude comparison plot (input vs. output overlay) showing reverb coloration
+- [ ] **PLAY-01**: User can load multiple WAV files (4-5) from /samples and switch between them
+- [ ] **PLAY-02**: User can toggle loop or single-shot playback per clip
+- [ ] **PLAY-03**: User can append configurable silence to input for reverb tail preservation
+- [ ] **PLAY-04**: User can play audio in real-time with live knob tweaking via sounddevice
+- [ ] **PLAY-05**: User can start/stop real-time playback with transport controls
 
-### Streamlit UI
+### Visualization
 
-- [x] **UI-01**: Streamlit web interface tying all controls and displays together
-- [x] **UI-02**: Algorithm selector dropdown populated from registry
-- [x] **UI-03**: Knob controls (6 sliders 0-100) and switch controls (2 three-position selectors) auto-generated from param_specs
-- [x] **UI-04**: Process button triggering algorithm execution on loaded audio
-- [x] **UI-05**: Analysis displays update after each process run (spectrograms, metrics, waveforms)
+- [ ] **VIZ-01**: User can view signal-flow diagram for each algorithm rendered via Graphviz in the UI
 
-## v2 Requirements
+### Export
 
-Deferred to future release. Tracked but not in current roadmap.
+- [ ] **EXP-01**: User can export algorithm as working .c and .h files to /daisyexport via UI button
+- [ ] **EXP-02**: Exported C code includes current parameter settings as default values in comments
+- [ ] **EXP-03**: User can see estimated RAM usage (KB) before exporting
+- [ ] **EXP-04**: Exported C code includes Daisy Seed AudioCallback template for Hothouse pedal
 
-### Enhanced Interaction
+## Future Requirements
 
-- **EINT-01**: Real-time audio processing with live knob tweaking
-- **EINT-02**: PySide6 desktop UI as alternative to Streamlit
-- **EINT-03**: Side-by-side algorithm comparison (two-column layout)
-- **EINT-04**: Parameter preset save/load (JSON snapshots)
+Deferred to future milestone. Tracked but not in current roadmap.
 
-### Advanced Analysis
+### Algorithms
 
-- **AADV-01**: Parameter sensitivity analysis (automated sweep + metric plot)
-- **AADV-02**: Batch comparison report across all registered algorithms
-- **AADV-03**: Impulse response waterfall/spectrogram
-- **AADV-04**: Stereo field visualization (correlation meter)
+- **ALGO-09**: Additional Dattorro topology variants (nested allpass tank, Griesinger-style)
+- **ALGO-10**: Schroeder classic reverb algorithm
+- **ALGO-11**: Neunaber-inspired reverb algorithm
 
-### Export & Integration
+### Export
 
-- **EXPO-01**: C code export for Daisy Seed (to_c_struct, to_c_process_fn)
-- **EXPO-02**: C struct memory estimation (RAM usage vs. 192 KB target)
-- **EXPO-03**: Export parameter documentation (knob mapping markdown)
-- **EXPO-04**: AU plugin loading for A/B comparison
+- **EXP-05**: C export for FDN/Room/Chamber algorithms (complex state structures)
+- **EXP-06**: Automated compile-check of generated C code with arm-none-eabi-gcc
 
-### Additional Algorithms
+### UI
 
-- **AALG-01**: Schroeder classic reverb (1962 design)
-- **AALG-02**: FDN (Feedback Delay Network) reverb
-- **AALG-03**: Neunaber-inspired reverb
+- **UI-01**: Side-by-side algorithm comparison view
+- **UI-02**: Parameter sensitivity sweep automation
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Convolution reverb | Workbench is exclusively for algorithmic reverbs |
-| DAW-style timeline/arrangement | Not needed for reverb evaluation |
-| MIDI control of parameters | No use case until real-time processing exists |
-| Multi-effect chains | Reverb is the focus; external chaining adds scope |
-| Cloud/server deployment | Local development tool only |
-| Variable sample rate support | 48 kHz is the target; supporting others complicates all coefficient math |
-| Perceptual quality scoring (PESQ/ViSQOL) | Designed for speech codecs, misleading for reverb |
-| Undo/redo system | Parameter presets solve this more simply |
+| AU plugin loading | Focus on own algorithms first |
+| PySide6 desktop UI | Streamlit sufficient for workbench |
+| Convolution reverbs | Algorithmic reverbs only — C portability constraint |
+| Live microphone/instrument input | v1.1 real-time is playback of loaded files only |
+| Visual node-based algorithm designer | Enormous UI scope, beyond workbench purpose |
+| Automated flashing to Daisy Seed | Platform-specific toolchain, user compiles manually |
+| Arbitrary EQ chain length | Fixed 3-band matches Daisy Seed knob constraint |
 
 ## Traceability
 
@@ -106,13 +80,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| ALGO-01 | — | Pending |
+| ALGO-02 | — | Pending |
+| ALGO-03 | — | Pending |
+| ALGO-04 | — | Pending |
+| ALGO-05 | — | Pending |
+| ALGO-06 | — | Pending |
+| ALGO-07 | — | Pending |
+| ALGO-08 | — | Pending |
+| EQ-01 | — | Pending |
+| EQ-02 | — | Pending |
+| PLAY-01 | — | Pending |
+| PLAY-02 | — | Pending |
+| PLAY-03 | — | Pending |
+| PLAY-04 | — | Pending |
+| PLAY-05 | — | Pending |
+| VIZ-01 | — | Pending |
+| EXP-01 | — | Pending |
+| EXP-02 | — | Pending |
+| EXP-03 | — | Pending |
+| EXP-04 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 26 total
+- v1.1 requirements: 20 total
 - Mapped to phases: 0
-- Unmapped: 26 ⚠️
+- Unmapped: 20 ⚠️
 
 ---
-*Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after initial definition*
+*Requirements defined: 2026-03-07*
+*Last updated: 2026-03-07 after initial definition*
