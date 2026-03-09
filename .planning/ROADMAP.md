@@ -46,7 +46,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
   3. User can append configurable silence to input audio and hear the full reverb tail decay naturally
   4. User can enable a 3-band EQ (low shelf, mid parametric, high shelf) on the reverb output and hear tonal changes
   5. User can select named Dattorro presets (Small Plate, Large Hall, Shimmer Pad, etc.) from a dropdown and hear distinct reverb characters
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 06-01-PLAN.md -- Biquad shelf filters, silence padding, and 3-band EQ engine integration
 - [x] 06-02-PLAN.md -- Dattorro presets and multi-file WAV sample discovery
@@ -108,7 +108,7 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 3. Analysis Metrics | v1.0 | 2/2 | Complete | 2026-03-05 |
 | 4. Engine + Streamlit UI | v1.0 | 3/3 | Complete | 2026-03-06 |
 | 5. Dattorro Plate Algorithm | v1.0 | 3/3 | Complete | 2026-03-06 |
-| 6. Playback Enhancements & EQ | v1.1 | 2/3 | Executing | - |
+| 6. Playback Enhancements & EQ | 2/3 | In Progress|  | - |
 | 7. FDN Reverb Algorithm | v1.1 | 0/? | Not started | - |
 | 8. Room, Chamber & Dattorro Variants | v1.1 | 0/? | Not started | - |
 | 9. Signal-Flow Diagrams & C Export | v1.1 | 0/? | Not started | - |

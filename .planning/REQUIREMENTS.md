@@ -20,14 +20,14 @@ Requirements for v1.1 milestone. Each maps to roadmap phases.
 
 ### EQ & Signal Chain
 
-- [ ] **EQ-01**: User can enable/disable post-reverb Biquad EQ on reverb trails
-- [ ] **EQ-02**: User can adjust 3-band EQ parameters (low shelf, mid parametric, high shelf) with frequency, Q, and gain controls
+- [x] **EQ-01**: User can enable/disable post-reverb Biquad EQ on reverb trails
+- [x] **EQ-02**: User can adjust 3-band EQ parameters (low shelf, mid parametric, high shelf) with frequency, Q, and gain controls
 
 ### Playback
 
 - [x] **PLAY-01**: User can load multiple WAV files (4-5) from /samples and switch between them
 - [ ] **PLAY-02**: User can toggle loop or single-shot playback per clip
-- [ ] **PLAY-03**: User can append configurable silence to input for reverb tail preservation
+- [x] **PLAY-03**: User can append configurable silence to input for reverb tail preservation
 - [ ] **PLAY-04**: User can play audio in real-time with live knob tweaking via sounddevice
 - [ ] **PLAY-05**: User can start/stop real-time playback with transport controls
 
@@ -88,11 +88,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALGO-06 | Phase 8 | Pending |
 | ALGO-07 | Phase 8 | Pending |
 | ALGO-08 | Phase 8 | Pending |
-| EQ-01 | Phase 6 | Pending |
-| EQ-02 | Phase 6 | Pending |
+| EQ-01 | Phase 6 | Complete |
+| EQ-02 | Phase 6 | Complete |
 | PLAY-01 | Phase 6 | Complete |
 | PLAY-02 | Phase 6 | Pending |
-| PLAY-03 | Phase 6 | Pending |
+| PLAY-03 | Phase 6 | Complete |
 | PLAY-04 | Phase 10 | Pending |
 | PLAY-05 | Phase 10 | Pending |
 | VIZ-01 | Phase 9 | Pending |
