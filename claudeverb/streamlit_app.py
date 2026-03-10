@@ -213,7 +213,7 @@ with st.sidebar:
 
     # -- Process button --
     process_clicked = st.button(
-        "Process", type="primary", use_container_width=True
+        "Process", type="primary", width="stretch"
     )
 
     # -- Reset button --
@@ -342,19 +342,19 @@ if st.session_state["results"] is not None:
     fig_waveform = engine.plot_waveform_comparison(
         dry, wet, padding_start_sample=original_length,
     )
-    st.pyplot(fig_waveform, use_container_width=False)
+    st.pyplot(fig_waveform, width="content")
     plt.close(fig_waveform)
 
     # -- Spectrograms --
     st.subheader("Mel Spectrogram Comparison")
     fig_mel = results["figures"]["mel"]
-    st.pyplot(fig_mel, use_container_width=False)
+    st.pyplot(fig_mel, width="content")
     plt.close(fig_mel)
 
     # -- FFT Overlay --
     st.subheader("FFT Overlay")
     fig_fft = results["figures"]["fft"]
-    st.pyplot(fig_fft, use_container_width=False)
+    st.pyplot(fig_fft, width="content")
     plt.close(fig_fft)
 
     # -- Metrics --
@@ -396,5 +396,5 @@ if st.session_state["results"] is not None:
     ax_ir.set_ylabel("Amplitude")
     ax_ir.set_title("Impulse Response")
     fig_ir.tight_layout()
-    st.pyplot(fig_ir, use_container_width=False)
+    st.pyplot(fig_ir, width="content")
     plt.close(fig_ir)
