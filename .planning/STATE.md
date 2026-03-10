@@ -4,21 +4,21 @@ milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
 current_plan: Not started
 status: planning
-stopped_at: Completed 06-03-PLAN.md (Phase 6 complete)
-last_updated: "2026-03-09T20:34:47.195Z"
-last_activity: 2026-03-09 -- Completed 06-03 Streamlit UI integration
+stopped_at: Completed 06-04-PLAN.md (gap closure)
+last_updated: "2026-03-10T02:38:49.078Z"
+last_activity: 2026-03-10 -- Completed 06-04 Dattorro preset KeyError gap closure
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 ---
 
 # Project State
 
-**Last session:** 2026-03-09T08:31:26.196Z
-**Stopped at:** Completed 06-03-PLAN.md (Phase 6 complete)
+**Last session:** 2026-03-10T02:38:49.076Z
+**Stopped at:** Completed 06-04-PLAN.md (gap closure)
 **Resume file:** None
 
 ## Current Position
@@ -26,9 +26,9 @@ progress:
 - **Phase:** 6 of 10 (Playback Enhancements & EQ) -- COMPLETE
 - **Current Plan:** Not started
 - **Status:** Ready to plan
-- **Last activity:** 2026-03-09 -- Completed 06-03 Streamlit UI integration
+- **Last activity:** 2026-03-10 -- Completed 06-04 Dattorro preset KeyError gap closure
 
-Progress: [##########] 100% (Phase 6 complete, 3/3 plans done)
+Progress: [##########] 100% (Phase 6 complete, 4/4 plans done)
 
 ## Project Reference
 
@@ -51,6 +51,8 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - Preset dropdown conditionally visible only when Dattorro Plate selected
 - EQ controls grouped under toggle checkbox to reduce sidebar clutter
 - Padding boundary shown as shaded gray axvspan region on waveform plot
+- pop() instead of set-to-None for widget-keyed session_state entries (prevents Streamlit widget value override)
+- Double guard (truthy + != Custom) for defense-in-depth against None in preset lookup
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)
