@@ -36,8 +36,8 @@ pytest
 
 ## Algorithms
 
-| Algorithm | Status | Description |
-|-----------|--------|-------------|
+| Algorithm | Status   | Description |
+|-----------|----------|-------------|
 | Freeverb | ✅ Done | Jezar's Schroeder-Moorer design (8 comb + 4 allpass/channel) |
 | FDN Reverbs | 🚧 Stub | Samples of various FDN reverbs, including 8x8 Hadamand reverb similar to Bricasti M7's 16x16 mix matrix reverb |
 | Plate (Dattorro) | ✅ Done | Dattorro figure-eight plate reverb |
