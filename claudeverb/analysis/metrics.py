@@ -148,6 +148,8 @@ def compute_drr(
 
     if reverb_energy < 1e-20:
         return float("inf")
+    if direct_energy < 1e-20:
+        return float("-inf")
 
     return float(10.0 * np.log10(direct_energy / reverb_energy))
 
@@ -179,6 +181,8 @@ def compute_clarity(
 
     if late_energy < 1e-20:
         return float("inf")
+    if early_energy < 1e-20:
+        return float("-inf")
 
     return float(10.0 * np.log10(early_energy / late_energy))
 

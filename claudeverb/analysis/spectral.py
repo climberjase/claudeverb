@@ -62,7 +62,6 @@ def plot_mel_comparison(
         ax.set_title(title)
 
     fig.colorbar(img, ax=axes, format="%+2.0f dB")
-    fig.tight_layout()
     return fig
 
 
