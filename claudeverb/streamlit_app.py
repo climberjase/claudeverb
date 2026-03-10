@@ -98,8 +98,10 @@ with st.sidebar:
         for k in list(st.session_state.keys()):
             if k.startswith("knob_") or k.startswith("switch_"):
                 del st.session_state[k]
-        for k in ["results", "dry_audio", "wet_audio", "preset_name", "_preset_values"]:
+        for k in ["results", "dry_audio", "wet_audio"]:
             st.session_state[k] = None
+        st.session_state.pop("preset_name", None)
+        st.session_state.pop("_preset_values", None)
         st.session_state["current_algo"] = algo_name
         st.rerun()
     st.session_state.setdefault("current_algo", algo_name)
@@ -121,7 +123,7 @@ with st.sidebar:
         )
 
         # When a preset is selected (not Custom), snap knobs to preset values
-        if preset_name != "Custom":
+        if preset_name and preset_name != "Custom":
             preset_vals = get_preset(preset_name)
             stored_preset = st.session_state.get("_preset_values")
             # Only snap if this is a new preset selection
