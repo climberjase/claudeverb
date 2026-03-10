@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 06-playback-enhancements-eq
 source: 06-01-SUMMARY.md, 06-02-SUMMARY.md, 06-03-SUMMARY.md
 started: 2026-03-09T14:00:00Z
@@ -53,7 +53,13 @@ skipped: 0
   reason: "User reported: when the dattoro plate algorithm is selected, an error is displayed - KeyError in get_preset() at dattorro_presets.py line 93: DATTORRO_PRESETS[name]"
   severity: blocker
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Cleanup code sets st.session_state['preset_name'] = None instead of deleting it. Streamlit prioritizes existing session_state values over widget index arg, so selectbox adopts None. Guard checks for 'Custom' but not None, so get_preset(None) is called and crashes with KeyError."
+  artifacts:
+    - path: "claudeverb/streamlit_app.py"
+      issue: "Line 101: cleanup sets session_state keys to None instead of deleting them"
+    - path: "claudeverb/streamlit_app.py"
+      issue: "Line 124: guard checks preset_name != 'Custom' but doesn't handle None"
+  missing:
+    - "Use st.session_state.pop('preset_name', None) instead of setting to None"
+    - "Or add None guard: if preset_name and preset_name != 'Custom'"
+  debug_session: ".planning/debug/dattorro-preset-keyerror.md"
