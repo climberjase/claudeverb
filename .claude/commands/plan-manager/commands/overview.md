@@ -1,0 +1,254 @@
+# Command: overview
+
+## Usage
+
+```
+overview [directory]
+```
+
+Discover and visualize all plans in the project, regardless of whether they're tracked in state.
+
+**This command works even without initialization** — useful for understanding an existing project's plans.
+
+## Steps
+
+> **Terminology:** Throughout this document, "Phase" also includes "Milestone" or "Step" when used as section headers. Detect which term the plan uses and preserve it. See SKILL.md § Terminology.
+
+0. **Load settings**: Read `enableCategoryOrganization` from settings using the standard lookup order:
+   - `~/.claude/plan-manager-settings.json` (user-wide)
+   - `.claude/plan-manager-settings.json` (project-specific, overrides user)
+   - Built-in default: `true`
+   - The resolved value of `enableCategoryOrganization` governs all category-related behavior in steps below.
+
+1. **Determine plans directory**:
+   - If `directory` argument provided: use that path
+   - Otherwise: use **Plans Directory Detection** (see [organization.md](../organization.md))
+   - This establishes which directory to scan
+
+2. **Scan all markdown files** in the directory and subdirectories:
+   - Recursively scan the plans directory for `.md` files
+   - Include files in subdirectories (e.g., `plans/layout-engine/*.md`)
+   - Read each `.md` file
+   - Classify each file by analyzing its content:
+
+   | Classification | Detection Criteria |
+   |----------------|-------------------|
+   | **Master Plan** | Has phases/steps (## Phase N or ## Step N), may have Status Dashboard |
+   | **Sub-plan (linked)** | Has `**Parent:**` header pointing to a master plan (→ Phase N) |
+   | **Sub-plan (nested, linked)** | Has `**Parent:**` header pointing to another sub-plan (→ Step N) and `**Master:**` header |
+   | **Sub-plan (orphaned)** | Looks like a sub-plan but no Parent reference or parent doesn't exist |
+   | **Standalone Plan** | Has plan structure but no phase/step hierarchy |
+   | **Completed** | Has `**Status:** Completed` or all phases/steps marked ✅ |
+   | **Abandoned** | Old modification date, marked as abandoned, or superseded |
+   | **Reference Doc** | Not a plan — just documentation |
+
+   **Additionally, if `enableCategoryOrganization` is true, classify standalone plans by category** for organization. If `enableCategoryOrganization` is false, skip this classification — standalone plans are simply "Standalone Plan" with no category label.
+
+   | Category | Detection Criteria |
+   |----------|-------------------|
+   | **Documentation** | Titles/content include "docs", "documentation", "guide", "manual", "how-to", "reference" |
+   | **Migration** | Titles/content include "migration", "migrate", "upgrade", "transition", "port" |
+   | **Design** | Titles/content include "design", "architecture", "proposal", "RFC", "spec" |
+   | **Feature** | Titles/content include "feature", "enhancement", "new", "add" |
+   | **Bugfix** | Titles/content include "bug", "fix", "issue", "problem", "error" |
+   | **Reference** | Pure reference material, glossaries, decision logs |
+   | **Standalone** | Doesn't match other categories |
+
+3. **Build relationship graph**:
+   - Map parent → children relationships by following `parentPlan` chains
+   - Identify which sub-plans link to which master plans (directly or through nested parents)
+   - Build the full tree: master → sub-plans → nested sub-plans (arbitrary depth)
+   - Detect circular references or broken links
+   - Extract blocker information from phase sections and state file
+   - For blocked phases, determine what's blocking them (phases, steps, or sub-plans)
+
+4. **Display ASCII hierarchy chart**:
+   - Show phase status with emojis (✅ Complete, 🔄 In Progress, ⏸️ Blocked, ⏳ Pending)
+   - For blocked phases, include blocker details: `⏸️ Blocked by Phase 3` or `⏸️ Blocked by Phase 3, api-redesign.md`
+   - Blocker format:
+     - Phase blockers: `Phase N`
+     - Step blockers: `Step N.M`
+     - Sub-plan blockers: filename only (e.g., `api-redesign.md`)
+     - Multiple blockers: comma-separated
+   - **If `enableCategoryOrganization` is false**: omit the `BY CATEGORY` and `UNCATEGORIZED STANDALONE` sections entirely. Also omit the `├── Category-organized: N` line from the SUMMARY.
+
+**When `enableCategoryOrganization` is true (default):**
+
+```
+Plans Overview: plans/
+═══════════════════════════════════════════════════════════
+
+ACTIVE HIERARCHIES
+──────────────────
+
+📋 layout-engine/ (Subdirectory)
+│  └── layout-engine.md (Master Plan)
+│      Status: 3/5 phases complete
+│
+│  ├── Phase 1: ✅ Complete
+│  ├── Phase 2: 🔄 In Progress
+│  │   └── 📄 grid-rethink.md (In Progress)
+│  │       └── 📄 grid-edge-cases.md (In Progress)
+│  ├── Phase 3: ⏸️ Blocked by Phase 2
+│  │   └── 📄 api-redesign.md (Completed)
+│  ├── Phase 4: ⏸️ Blocked by Phase 3, api-redesign.md
+│  └── Phase 5: ⏳ Pending
+
+📋 auth-migration.md (Master Plan, flat structure)
+│   Status: 1/3 phases complete
+│
+├── Phase 1: ✅ Complete
+├── Phase 2: 🔄 In Progress
+└── Phase 3: ⏳ Pending
+
+
+BY CATEGORY (with suggested organization)
+──────────────────────────────────────────
+
+📂 migrations/ (suggested category dir)
+   📄 database-schema-v2.md — Migration plan
+   📄 api-v3-migration.md — Migration plan
+
+📂 docs/ (suggested category dir)
+   📄 quick-fix-notes.md — Documentation
+   📄 onboarding-guide.md — Documentation
+
+📂 designs/ (suggested category dir)
+   📄 performance-ideas.md — Design proposal
+   📄 new-api-design.md — Architecture design
+
+
+UNCATEGORIZED STANDALONE
+─────────────────────────
+
+📄 random-ideas.md — Standalone, no clear category
+
+
+ORPHANED / UNLINKED
+───────────────────
+
+⚠️  old-layout-approach.md
+    Claims parent: layout-engine.md → Phase 2
+    But not referenced in parent's Status Dashboard
+
+⚠️  experimental-cache.md
+    No parent reference, looks like abandoned sub-plan
+    Last modified: 45 days ago
+
+
+COMPLETED (not linked to active work)
+─────────────────────────────────────
+
+✅ v1-migration.md — Completed master plan (all phases done)
+✅ hotfix-auth.md — Completed, parent plan also complete
+
+
+SUMMARY
+───────
+
+Total plans: 16
+├── Master plans: 3 (2 active, 1 completed)
+├── Linked sub-plans: 4
+├── Category-organized: 5 (migrations: 2, docs: 2, designs: 1)
+├── Uncategorized standalone: 1
+└── Orphaned/Unlinked: 2
+
+```
+
+**When `enableCategoryOrganization` is false:**
+
+```
+Plans Overview: plans/
+═══════════════════════════════════════════════════════════
+
+ACTIVE HIERARCHIES
+──────────────────
+
+📋 layout-engine/ (Subdirectory)
+│  └── layout-engine.md (Master Plan)
+│      Status: 3/5 phases complete
+│
+│  ├── Phase 1: ✅ Complete
+│  ├── Phase 2: 🔄 In Progress
+│  └── Phase 3: ⏳ Pending
+
+STANDALONE
+──────────
+
+📄 database-schema-v2.md — Standalone plan
+📄 quick-fix-notes.md — Standalone plan
+📄 random-ideas.md — Standalone plan
+
+
+ORPHANED / UNLINKED
+───────────────────
+
+⚠️  experimental-cache.md
+    No parent reference, looks like abandoned sub-plan
+    Last modified: 45 days ago
+
+
+COMPLETED (not linked to active work)
+─────────────────────────────────────
+
+✅ v1-migration.md — Completed master plan (all phases done)
+
+
+SUMMARY
+───────
+
+Total plans: 12
+├── Master plans: 2 (1 active, 1 completed)
+├── Linked sub-plans: 3
+├── Standalone: 3
+└── Orphaned/Unlinked: 1
+
+```
+
+5. **Interactive cleanup for orphaned/completed**:
+
+If orphaned, unlinked completed, or (when `enableCategoryOrganization` is true) uncategorized standalone plans are found, use the **AskUserQuestion tool** with descriptive options.
+
+When `enableCategoryOrganization` is **true**, include uncategorized standalone in the prompt and offer "Organize all":
+
+```
+Question: "Found 2 orphaned plans, 1 completed plan, and 5 uncategorized standalone plans. How would you like to handle them?"
+Header: "Cleanup"
+Options:
+  - Label: "Organize all"
+    Description: "Fix broken state, flatten solo nested plans, rename, categorize, link related plans, then archive completed"
+  - Label: "Review individually"
+    Description: "I'll show a summary of each plan and ask what to do with it one by one"
+  - Label: "Move completed"
+    Description: "Move completed unlinked plans to plans/completed/ directory"
+  - Label: "Leave as-is"
+    Description: "Just show the report, don't take any action"
+```
+
+When `enableCategoryOrganization` is **false**, omit uncategorized standalone from the prompt and omit "Organize all" (since the main reason to organize would be categorization):
+
+```
+Question: "Found 2 orphaned plans and 1 completed plan. How would you like to handle them?"
+Header: "Cleanup"
+Options:
+  - Label: "Review individually"
+    Description: "I'll show a summary of each plan and ask what to do with it one by one"
+  - Label: "Move completed"
+    Description: "Move completed unlinked plans to plans/completed/ directory"
+  - Label: "Leave as-is"
+    Description: "Just show the report, don't take any action"
+```
+
+Based on selection:
+- **Organize all**: Switch to the `organize` workflow — organize by category, analyze relationships, suggest links, then cleanup
+- **Review individually**: For each plan, show content summary and use AskUserQuestion again: Organize by category? Link to phase? Move to completed? Delete? Skip? (When `enableCategoryOrganization` is false, omit the "Organize by category?" option)
+- **Move completed**: Move completed unlinked plans to `plans/completed/` (sibling to plans directory)
+- **Leave as-is**: Just report, no action
+
+6. **Output state suggestion**:
+
+If no state file exists but master plans were detected:
+
+```
+💡 Tip: Run `/plan-manager init plans/layout-engine.md` to start tracking this plan hierarchy.
+```

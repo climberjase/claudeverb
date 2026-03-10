@@ -1,0 +1,261 @@
+# Command: organize
+
+## Usage
+
+```
+organize [directory] [--nested]
+```
+
+Automatically analyze and link related plans together, rename poorly-named files, then handle orphaned/completed plans.
+
+**This is the "just fix it" command** — it does everything `overview` does, plus actively organizes.
+
+## Steps
+
+### Phase 1: Scan Everything (no changes yet)
+
+1. **Run full overview scan** (same as `overview` steps 1-4)
+
+2. **Load category organization settings**:
+   - Check for `~/.claude/plan-manager-settings.json` (user global)
+   - Check for `<project>/.claude/plan-manager-settings.json` (project-specific, overrides user)
+   - If neither exists, use default category directories (docs, migrations, designs, features, fixes, reference, misc)
+   - **Note**: Settings file is optional and will NOT be auto-created
+   - If `enableCategoryOrganization` is false in settings, skip category organization steps
+
+3. **Detect flattenable plans** (unless `--nested` flag is passed):
+   - Scan all directories under the plans root (including `completed/`, category directories, and master plan subdirectories) for any plan file where:
+     - The file's parent directory name matches the filename without the `.md` extension (e.g., `foo/foo.md`)
+     - The file is the **only** file in that directory
+   - For each match, compute the flatten target: move up one directory level and remove the now-empty directory. Examples:
+     - `plans/layout-engine/layout-engine.md` → `plans/layout-engine.md`
+     - `plans/migrations/auth/auth.md` → `plans/migrations/auth.md`
+     - `plans/completed/foo/foo.md` → `plans/completed/foo.md`
+
+4. **Detect randomly-named plans**:
+   - Scan for files with random/meaningless names (see `rename` command for patterns)
+   - For each, analyze content and propose a meaningful name
+
+5. **Detect category organization opportunities** (if `enableCategoryOrganization` is true):
+   - Identify standalone plans that match category patterns
+   - Group by detected category (docs, migrations, designs, features, etc.)
+   - Use custom category directory names from settings if available, otherwise defaults
+
+6. **Analyze relationships between unlinked plans**:
+   - For each standalone or orphaned plan, analyze content
+   - Look for references to phases, topics, or keywords that match master plan phases
+   - **Also consider sub-plans as potential parents**: if a plan's content matches a step in a sub-plan, suggest linking to that sub-plan's step (not just master plan phases)
+   - Build a list of suggested linkages
+   - Plans in category directories can still be linked to master plan phases or sub-plan steps if appropriate
+
+7. **Detect broken state entries**:
+   - Scan state file for entries referencing files that no longer exist on disk
+   - Scan state file for entries with invalid or inconsistent data (e.g., sub-plan listed under wrong master, circular links)
+   - **Nested reference issues**:
+     - Invalid `parentStep` references (step N doesn't exist in parent sub-plan)
+     - Invalid `parentPlan` chain (points to file not in `subPlans[]` or `masterPlans[]`)
+     - Orphaned nested sub-plans (parent sub-plan deleted but children remain)
+     - Missing `**Master:**` header in nested sub-plans
+     - `masterPlan` field mismatch vs actual chain
+   - These will be listed under FIX for removal or correction
+
+8. **Identify orphaned/completed plans**:
+   - Remaining orphans with no obvious link suggestion
+   - Completed unlinked plans that could move to `plans/completed/`
+
+---
+
+### Phase 2: Present the Full Plan
+
+After scanning, present **all proposed changes in one consolidated view** before doing anything. Output this as plain text (not via AskUserQuestion):
+
+```
+Organization Plan
+─────────────────
+
+FLATTEN (3 solo nested plans)
+  plans/layout-engine/layout-engine.md → plans/layout-engine.md
+  plans/migrations/auth/auth.md        → plans/migrations/auth.md
+  plans/completed/foo/foo.md           → plans/completed/foo.md
+
+RENAME (2 randomly-named files)
+  lexical-puzzling-emerson.md → grid-edge-cases.md   (based on content: grid edge case test notes)
+  abstract-floating-jenkins.md → performance-notes.md (based on content: render performance analysis)
+
+CATEGORIZE (5 standalone plans → category subdirs)
+  database-schema-v2.md  → migrations/
+  api-v3-migration.md    → migrations/
+  auth-upgrade.md        → migrations/
+  api-overview.md        → docs/
+  architecture.md        → docs/
+
+LINK (3 plans → parent plans)
+  performance-notes.md → Master: layout-engine.md → Phase 4: Performance Optimization
+  grid-edge-cases.md   → Master: layout-engine.md → Phase 2: Grid Engine
+  grid-workaround.md   → Sub-plan: grid-rethink.md → Step 3: Edge cases
+
+FIX (2 broken state entries)
+  ghost-refactor.md — file not found on disk, remove from state
+  auth-overhaul.md  — listed as sub-plan of both master-a and master-b, unlink from master-b
+
+ARCHIVE (1 completed unlinked plan)
+  hotfix-login.md → plans/completed/hotfix-login.md
+
+NO ACTION (1 plan — no clear category or phase match)
+  random-ideas.md
+```
+
+If nothing was found, output:
+```
+Nothing to organize — all plans are already structured.
+```
+and stop.
+
+Then ask for approval via **AskUserQuestion**:
+
+```
+Question: "Proceed with this organization plan?"
+Header: "Organize"
+Options:
+  - Label: "Apply all (Recommended)"
+    Description: "Execute every change listed above"
+  - Label: "Review each section"
+    Description: "I'll walk through each category of changes and you approve or skip"
+  - Label: "Cancel"
+    Description: "Don't make any changes"
+```
+
+---
+
+### Phase 3: Execute
+
+**If "Apply all"**: Execute all proposed changes in order: fix, flatten, rename, categorize, link, archive. Update all references (state file, links in plans) after each move. Output the summary (see below).
+
+**If "Review each section"**: Walk through each section that has proposed changes, one at a time, using **AskUserQuestion**:
+
+For FIX:
+```
+Question: "Fix 2 broken state entries?"
+Header: "Fix"
+Options:
+  - Label: "Fix all"
+    Description: "Remove ghost entries and correct inconsistent links"
+  - Label: "Review individually"
+    Description: "Ask about each broken entry separately"
+  - Label: "Skip fixing"
+    Description: "Leave the state file as-is"
+```
+
+For FLATTEN:
+```
+Question: "Flatten 3 solo nested plans?"
+Header: "Flatten"
+Options:
+  - Label: "Flatten all"
+    Description: "plans/layout-engine/layout-engine.md → plans/layout-engine.md, ..."
+  - Label: "Review individually"
+    Description: "Ask about each one separately"
+  - Label: "Skip flattening"
+    Description: "Leave them nested"
+```
+
+For RENAME:
+```
+Question: "Rename 2 randomly-named plans?"
+Header: "Rename"
+Options:
+  - Label: "Rename all"
+    Description: "Accept all suggested names"
+  - Label: "Review individually"
+    Description: "Approve each rename separately"
+  - Label: "Skip renaming"
+    Description: "Keep current names"
+```
+
+For CATEGORIZE:
+```
+Question: "Move 5 plans to category subdirectories?"
+Header: "Categorize"
+Options:
+  - Label: "Move all"
+    Description: "migrations/ (3), docs/ (2)"
+  - Label: "Review by category"
+    Description: "Approve each category separately"
+  - Label: "Skip categorizing"
+    Description: "Leave plans where they are"
+```
+
+For LINK:
+```
+Question: "Link 3 plans to parent plans?"
+Header: "Link"
+Options:
+  - Label: "Link all"
+    Description: "performance-notes.md → Phase 4, grid-edge-cases.md → Phase 2, grid-workaround.md → grid-rethink.md Step 3"
+  - Label: "Review individually"
+    Description: "Approve each link separately"
+  - Label: "Skip linking"
+    Description: "Leave them unlinked"
+```
+
+For ARCHIVE:
+```
+Question: "Archive 1 completed unlinked plan?"
+Header: "Archive"
+Options:
+  - Label: "Archive it"
+    Description: "hotfix-login.md → plans/completed/hotfix-login.md"
+  - Label: "Skip"
+    Description: "Leave it in place"
+```
+
+When reviewing individually within any section, use a per-item **AskUserQuestion** with "Yes" / "Skip" options and the specific move/rename/link shown in the description.
+
+**When executing LINK**: For each plan being linked, follow the **capture command** steps to normalize the file and add the parent header block (skipping capture's file-detection and phase/step-selection steps, since those are already determined). When linking to a sub-plan step, use capture's nested path: set `parentStep` in state, add `**Parent:** → Step {N}` and `**Master:**` headers, and update the parent sub-plan's step section. This delegates to the **normalize command** internally, same as capture does.
+
+---
+
+### Phase 4: Summary
+
+After all changes are applied:
+
+```
+Organization Complete
+─────────────────────
+
+✓ Flattened 3 solo nested plans:
+  • plans/layout-engine/layout-engine.md → plans/layout-engine.md
+  • plans/migrations/auth/auth.md → plans/migrations/auth.md
+  • plans/completed/foo/foo.md → plans/completed/foo.md
+
+✓ Renamed 2 plans:
+  • lexical-puzzling-emerson.md → grid-edge-cases.md
+  • abstract-floating-jenkins.md → performance-notes.md
+
+✓ Organized by category:
+  • 3 migration plans → migrations/
+  • 2 documentation plans → docs/
+
+✓ Linked 3 plans to parent plans:
+  • performance-notes.md → Master: layout-engine.md → Phase 4: Performance Optimization
+  • grid-edge-cases.md → Master: layout-engine.md → Phase 2: Grid Engine
+  • grid-workaround.md → Sub-plan: grid-rethink.md → Step 3: Edge cases
+
+✓ Fixed 2 broken state entries:
+  • ghost-refactor.md — removed missing file from state
+  • auth-overhaul.md — unlinked from duplicate master
+
+✓ Archived 1 completed plan:
+  • hotfix-login.md → plans/completed/hotfix-login.md
+
+⚠️ 1 plan left unchanged (no clear category or phase match):
+  • random-ideas.md
+
+Current state:
+├── Master plans: 1 active (flat)
+├── Linked sub-plans: 5
+├── Category-organized: 5
+└── Unlinked: 1
+```
+
+Omit any section that had no changes.

@@ -3,7 +3,10 @@
 Python DSP workbench for evaluating and comparing reverb algorithms for use on microprocessors and audio plugins at 48 kHz.
 Outputs mel spectrograms, frequency analysis, and acoustic metrics (RT60, DRR, C80) and allows for A/B comparison of reverb algorithms.
 
-Support for features like varying the wet/dry ratio for listening tests via a web interface.
+Support for features like varying the wet/dry ratio for listening tests, algorithm exploration, C code translation for hardware
+devices, and a mix of various modern and vintage digital reverb algorithms, via a web interface.
+
+![UI](docs/demo_ui.png)
 
 Algorithms are designed for eventual C port to the
 [STM32 Daisy Seed](https://electro-smith.com/daisy) embedded audio platform.
@@ -14,6 +17,22 @@ algorithms we develop.
 
 ## Setup
 
+```bash
+pip install -e ".[dev]"
+```
+
+## Running
+
+```bash
+# Web UI (Streamlit)
+streamlit run claudeverb/streamlit_app.py
+
+# Desktop UI (PySide6)
+python main.py
+
+# Tests
+pytest
+```
 
 ## Algorithms
 
@@ -48,3 +67,15 @@ export_algorithm(algo, output_dir="./c_export")
 ```
 
 Generates `Freeverb.h` and `Freeverb.c` targeting the libDaisy framework.
+
+## Screenshots
+
+![Output](docs/demo_output.png)
+
+![Mel Spectrogram](docs/demo_mel_spectrogram.png)
+
+![FFT Magnitude Comparison](docs/demo_fft_mag_comparison.png)
+
+![Metrics](docs/demo_metrics.png)
+
+![Metrics Charts](docs/demo_metrics_charts.png)

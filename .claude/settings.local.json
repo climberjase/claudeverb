@@ -18,7 +18,15 @@
       "WebFetch(domain:github.com)",
       "Bash(grep:*)",
       "Bash(test:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Skill(gsd:execute-phase)",
+      "Bash(python:*)",
+      "Bash(do:*)",
+      "Bash(pytest:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(/Users/jasondoherty/Documents/SRC/claudeverb/.venv/bin/python:*)",
+      "Skill(gsd:plan-milestone-gaps)",
+      "Bash(echo exit: $?:*)"
     ]
   }
 }

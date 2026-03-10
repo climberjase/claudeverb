@@ -98,6 +98,10 @@ with st.sidebar:
         for k in list(st.session_state.keys()):
             if k.startswith("knob_") or k.startswith("switch_"):
                 del st.session_state[k]
+        prev = st.session_state.get("results")
+        if prev and "figures" in prev:
+            for fig in prev["figures"].values():
+                plt.close(fig)
         for k in ["results", "dry_audio", "wet_audio"]:
             st.session_state[k] = None
         st.session_state.pop("preset_name", None)
@@ -144,25 +148,31 @@ with st.sidebar:
             continue
 
         if spec["type"] == "knob":
-            st.slider(
-                spec["label"],
-                spec["min"],
-                spec["max"],
-                spec["default"],
-                key=f"knob_{param_name}",
+            knob_key = f"knob_{param_name}"
+            knob_kwargs = dict(
+                label=spec["label"],
+                min_value=spec["min"],
+                max_value=spec["max"],
+                key=knob_key,
             )
+            if knob_key not in st.session_state:
+                knob_kwargs["value"] = spec["default"]
+            st.slider(**knob_kwargs)
         elif spec["type"] == "switch":
             positions = spec["positions"]
             labels = spec["labels"]
-            st.select_slider(
-                spec["label"],
+            switch_key = f"switch_{param_name}"
+            switch_kwargs = dict(
+                label=spec["label"],
                 options=positions,
-                value=spec["default"],
                 format_func=lambda x, _labels=labels, _positions=positions: _labels[
                     _positions.index(x)
                 ],
-                key=f"switch_{param_name}",
+                key=switch_key,
             )
+            if switch_key not in st.session_state:
+                switch_kwargs["value"] = spec["default"]
+            st.select_slider(**switch_kwargs)
 
     # -- Detect if user tweaked knobs away from preset --
     if algo_name == "dattorro_plate" and st.session_state.get("_preset_values"):
@@ -214,6 +224,11 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 if reset_clicked:
+    # Close any leaked matplotlib figures before clearing state
+    prev = st.session_state.get("results")
+    if prev and "figures" in prev:
+        for fig in prev["figures"].values():
+            plt.close(fig)
     # Clear algorithm param keys from session state
     for param_name, spec in specs.items():
         if param_name == "mix":
@@ -240,6 +255,12 @@ if reset_clicked:
 # ---------------------------------------------------------------------------
 
 if process_clicked and audio_data is not None:
+    # Close any matplotlib figures from previous processing run
+    prev_results = st.session_state.get("results")
+    if prev_results and "figures" in prev_results:
+        for fig in prev_results["figures"].values():
+            plt.close(fig)
+
     # Collect params from sidebar widget values
     params: dict = {}
     for param_name, spec in specs.items():
