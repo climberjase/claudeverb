@@ -48,7 +48,8 @@ import math
 
 import numpy as np
 
-from claudeverb.algorithms.filters import DelayLine
+from claudeverb.algorithms.base import ReverbAlgorithm
+from claudeverb.algorithms.filters import AllpassFilter, DelayLine
 from claudeverb.algorithms.dattorro_plate import OnePole, DCBlocker
 
 
@@ -181,8 +182,11 @@ class FDNCore:
         Returns:
             List of 4 output samples (pre-mixing tap points).
         """
-        # Compute LFO value
-        lfo_val = math.sin(self._lfo_phase) * self._mod_depth
+        # Compute LFO value (disabled in freeze mode to preserve energy)
+        if self._frozen:
+            lfo_val = 0.0
+        else:
+            lfo_val = math.sin(self._lfo_phase) * self._mod_depth
 
         # Read from delay lines with LFO modulation
         # Channels 0,2 get +lfo, channels 1,3 get -lfo
@@ -202,11 +206,15 @@ class FDNCore:
             self._lfo_phase -= 2.0 * math.pi
 
         # Per-channel processing: damping -> DC blocker -> gain
+        # In freeze mode, bypass damping and DC blocking to preserve energy
         processed = [0.0] * 4
         for ch in range(4):
-            val = self._damping_filters[ch].process_sample(outputs[ch])
-            val = self._dc_blockers[ch].process_sample(val)
-            val *= self._channel_gains[ch]
+            if self._frozen:
+                val = outputs[ch] * self._channel_gains[ch]
+            else:
+                val = self._damping_filters[ch].process_sample(outputs[ch])
+                val = self._dc_blockers[ch].process_sample(val)
+                val *= self._channel_gains[ch]
             processed[ch] = val
 
         # Hadamard butterfly mixing
@@ -269,18 +277,400 @@ class FDNCore:
 
 
 # ---------------------------------------------------------------------------
-# FDNReverb placeholder (full implementation in Plan 02)
+# FDNReverb ReverbAlgorithm wrapper
 # ---------------------------------------------------------------------------
 
-class FDNReverb:
-    """Placeholder for FDN ReverbAlgorithm wrapper.
+class FDNReverb(ReverbAlgorithm):
+    """FDN Reverb algorithm (4-channel Hadamard FDN with input diffusion).
 
-    Full implementation (ReverbAlgorithm subclass with stereo output,
-    parameter mapping, presets, and C export) will be added in Plan 02.
-    This stub exists so the test scaffold can import the name.
+    Wraps FDNCore in the standard ReverbAlgorithm interface for the UI/registry.
+    Mono input is diffused through 3 cascaded allpass filters, fed into the
+    4-channel FDN, and tapped for stereo output with width control.
+
+    6 knobs: decay_time, size, damping, modulation, mix, pre_delay
+    2 switches: switch1 (Freeze/Normal/Bright), switch2 (Mono/Stereo/Wide)
     """
 
+    __slots__ = (
+        "_fdn_core",
+        "_input_diffusers",
+        "_pre_delay_line",
+        # Parameter state
+        "_decay_time", "_size", "_damping", "_modulation",
+        "_mix", "_pre_delay",
+        "_switch1", "_switch2",
+    )
+
     def __init__(self) -> None:
-        raise NotImplementedError(
-            "FDNReverb is a placeholder -- full implementation in Plan 02"
-        )
+        self._fdn_core = FDNCore(BASE_DELAYS)
+        self._input_diffusers = [
+            AllpassFilter(149, feedback=0.5),
+            AllpassFilter(233, feedback=0.5),
+            AllpassFilter(347, feedback=0.5),
+        ]
+        self._pre_delay_line = DelayLine(int(0.1 * SAMPLE_RATE))  # up to 100ms
+
+        # Parameter state defaults
+        self._decay_time = 50
+        self._size = 50
+        self._damping = 40
+        self._modulation = 30
+        self._mix = 75
+        self._pre_delay = 0
+        self._switch1 = 0   # Normal
+        self._switch2 = 0   # Stereo
+
+        self._initialize()
+
+    def _initialize(self) -> None:
+        """Apply default parameters to FDNCore."""
+        self.update_params({
+            "decay_time": self._decay_time,
+            "size": self._size,
+            "damping": self._damping,
+            "modulation": self._modulation,
+            "mix": self._mix,
+            "pre_delay": self._pre_delay,
+            "switch1": self._switch1,
+            "switch2": self._switch2,
+        })
+
+    def _process_impl(self, audio: np.ndarray) -> np.ndarray:
+        """Process audio -- mono input always produces stereo output."""
+        if audio.ndim == 1:
+            mono_in = audio
+        else:
+            # Sum stereo to mono
+            mono_in = (audio[0] + audio[1]) * np.float32(0.5)
+
+        n_samples = len(mono_in)
+        left_out = np.zeros(n_samples, dtype=np.float32)
+        right_out = np.zeros(n_samples, dtype=np.float32)
+
+        # Width crossmix based on stereo mode
+        if self._switch2 == -1:    # Mono
+            width = 0.0
+        elif self._switch2 == 1:   # Wide
+            width = 2.0
+        else:                      # Stereo
+            width = 1.0
+
+        wet1 = (1.0 + width) / 2.0
+        wet2 = (1.0 - width) / 2.0
+
+        # Pre-delay samples
+        pre_delay_samples = int((self._pre_delay / 100.0) * 0.1 * SAMPLE_RATE)
+
+        # Freeze mode output gain: compensate for FDN delay geometry
+        # (stored energy is distributed across delay buffers, so instantaneous
+        # output is lower than the perceived level during active decay)
+        freeze_active = self._switch1 == -1
+        freeze_gain = 4.0 if freeze_active else 1.0
+
+        # Mix: 0-100 -> dry/wet blend (0=fully dry, 100=fully wet)
+        mix_wet = self._mix / 100.0
+        mix_dry = 1.0 - mix_wet
+
+        for i in range(n_samples):
+            dry_sample = float(mono_in[i])
+            x = dry_sample
+
+            # Pre-delay
+            if pre_delay_samples > 0:
+                delayed = self._pre_delay_line.read(pre_delay_samples)
+                self._pre_delay_line.write(x)
+                x = delayed
+            else:
+                self._pre_delay_line.write(x)
+
+            # Input diffusion: 3 cascaded allpass filters
+            for ap in self._input_diffusers:
+                x = ap.process_sample(x)
+
+            # Distribute to 4 FDN channels (equal distribution)
+            inputs = [x, x, x, x]
+
+            # FDN core processing
+            outputs = self._fdn_core.process_sample(inputs)
+
+            # Stereo tap: L = out[0] + out[2], R = out[1] + out[3]
+            raw_l = (outputs[0] + outputs[2]) * freeze_gain
+            raw_r = (outputs[1] + outputs[3]) * freeze_gain
+
+            # Width crossmix
+            wet_l = raw_l * wet1 + raw_r * wet2
+            wet_r = raw_r * wet1 + raw_l * wet2
+
+            # Mix dry/wet
+            final_l = dry_sample * mix_dry + wet_l * mix_wet
+            final_r = dry_sample * mix_dry + wet_r * mix_wet
+
+            # Hard clip
+            final_l = max(-1.0, min(1.0, final_l))
+            final_r = max(-1.0, min(1.0, final_r))
+
+            left_out[i] = np.float32(final_l)
+            right_out[i] = np.float32(final_r)
+
+        return np.stack([left_out, right_out])
+
+    def update_params(self, params: dict) -> None:
+        """Update algorithm parameters from dict.
+
+        Maps 0-100 knob values to internal FDNCore parameters.
+        """
+        if "decay_time" in params:
+            self._decay_time = params["decay_time"]
+        if "size" in params:
+            self._size = params["size"]
+        if "damping" in params:
+            self._damping = params["damping"]
+        if "modulation" in params:
+            self._modulation = params["modulation"]
+        if "mix" in params:
+            self._mix = params["mix"]
+        if "pre_delay" in params:
+            self._pre_delay = params["pre_delay"]
+        if "switch1" in params:
+            self._switch1 = params["switch1"]
+        if "switch2" in params:
+            self._switch2 = params["switch2"]
+
+        # Switch1 modes -- check freeze first to skip disruptive changes
+        if self._switch1 == -1:
+            # Freeze mode: infinite sustain, bypass damping/DC/modulation
+            # Do NOT change size or decay -- preserve delay line state
+            self._fdn_core.set_freeze(True)
+            return
+        else:
+            self._fdn_core.set_freeze(False)
+
+        # Map decay_time 0-100 -> 0.2s to 20.0s RT60 (exponential)
+        val = max(self._decay_time, 0)
+        rt60 = 0.2 * (100.0 ** (val / 100.0))
+        self._fdn_core.set_decay(rt60)
+
+        # Map size 0-100 -> 0.5x to 2.0x delay scale
+        size_scale = 0.5 + (self._size / 100.0) * 1.5
+        self._fdn_core.set_size(size_scale)
+
+        # Map damping 0-100 -> OnePole coefficient (0=bright/1.0, 100=dark/0.05)
+        # OnePole: y = x * coeff + y_prev * (1 - coeff); coeff=1.0 is transparent
+        damp_coeff = 1.0 - (self._damping / 100.0) * 0.95
+
+        if self._switch1 == 1:
+            # Bright mode: override damping to fully transparent
+            damp_coeff = 1.0
+
+        self._fdn_core.set_damping(damp_coeff)
+
+        # Map modulation 0-100 -> 0 to 12 samples depth, rate stays 0.7 Hz
+        mod_depth = (self._modulation / 100.0) * 12.0
+        self._fdn_core.set_modulation(mod_depth, 0.7)
+
+    def reset(self) -> None:
+        """Reset all internal state to initial values."""
+        self._fdn_core.reset()
+        for ap in self._input_diffusers:
+            ap.reset()
+        self._pre_delay_line.reset()
+        # Re-apply current parameters (reset() reverts delays to base)
+        self.update_params({
+            "decay_time": self._decay_time,
+            "size": self._size,
+            "damping": self._damping,
+            "modulation": self._modulation,
+            "mix": self._mix,
+            "pre_delay": self._pre_delay,
+            "switch1": self._switch1,
+            "switch2": self._switch2,
+        })
+
+    @property
+    def param_specs(self) -> dict:
+        """Parameter specifications for UI/automation."""
+        return {
+            "decay_time": {
+                "type": "knob", "min": 0, "max": 100, "default": 50,
+                "label": "Decay Time",
+            },
+            "size": {
+                "type": "knob", "min": 0, "max": 100, "default": 50,
+                "label": "Size",
+            },
+            "damping": {
+                "type": "knob", "min": 0, "max": 100, "default": 40,
+                "label": "Damping",
+            },
+            "modulation": {
+                "type": "knob", "min": 0, "max": 100, "default": 30,
+                "label": "Modulation",
+            },
+            "mix": {
+                "type": "knob", "min": 0, "max": 100, "default": 75,
+                "label": "Mix",
+            },
+            "pre_delay": {
+                "type": "knob", "min": 0, "max": 100, "default": 0,
+                "label": "Pre-Delay",
+            },
+            "switch1": {
+                "type": "switch", "positions": [-1, 0, 1], "default": 0,
+                "label": "Freeze",
+                "labels": ["Freeze", "Normal", "Bright"],
+            },
+            "switch2": {
+                "type": "switch", "positions": [-1, 0, 1], "default": 0,
+                "label": "Stereo Mode",
+                "labels": ["Mono", "Stereo", "Wide"],
+            },
+        }
+
+    def to_c_struct(self) -> str:
+        """Return C typedef struct for the FDN reverb state."""
+        return """\
+typedef struct {
+    // 4 delay line buffers (circular, fixed-size)
+    float delay_buf_0[1265];   // BASE_DELAYS[0] + MAX_MOD_EXCURSION + 2
+    float delay_buf_1[1437];   // BASE_DELAYS[1] + MAX_MOD_EXCURSION + 2
+    float delay_buf_2[1673];   // BASE_DELAYS[2] + MAX_MOD_EXCURSION + 2
+    float delay_buf_3[1913];   // BASE_DELAYS[3] + MAX_MOD_EXCURSION + 2
+    int delay_write_idx[4];
+    int delay_max[4];
+
+    // 4 one-pole damping filter states
+    float damp_coeff;
+    float damp_state[4];
+
+    // 4 DC blocker states
+    float dc_r;
+    float dc_x_prev[4];
+    float dc_y_prev[4];
+
+    // LFO state
+    float lfo_phase;
+    float lfo_phase_inc;
+    float mod_depth;
+
+    // Feedback gains and delay lengths
+    float channel_gains[4];
+    int base_delays[4];
+    int current_delays[4];
+    float rt60;
+
+    // Input diffusers (3 allpass filters)
+    float diffuser_buf_0[149];
+    float diffuser_buf_1[233];
+    float diffuser_buf_2[347];
+    int diffuser_write_idx[3];
+    float diffuser_gain;       // 0.5 for all three
+
+    // Pre-delay line
+    float pre_delay_buf[4800]; // max 100ms at 48kHz
+    int pre_delay_write_idx;
+    int pre_delay_samples;
+
+    // Config
+    int sample_rate;
+    int frozen;
+    float width;               // stereo width (0.0=mono, 1.0=stereo, 2.0=wide)
+} FDNReverbState;
+"""
+
+    def to_c_process_fn(self) -> str:
+        """Return C process function template for FDN reverb."""
+        return """\
+void fdn_reverb_process(FDNReverbState* state, const float* input,
+                        float* output_left, float* output_right,
+                        int num_samples) {
+    float wet1 = (1.0f + state->width) / 2.0f;
+    float wet2 = (1.0f - state->width) / 2.0f;
+
+    for (int i = 0; i < num_samples; i++) {
+        float x = input[i];
+
+        // 1. Pre-delay (circular buffer read/write)
+        float delayed = state->pre_delay_buf[
+            (state->pre_delay_write_idx - state->pre_delay_samples
+             + 4800) % 4800];
+        state->pre_delay_buf[state->pre_delay_write_idx] = x;
+        state->pre_delay_write_idx = (state->pre_delay_write_idx + 1) % 4800;
+        x = (state->pre_delay_samples > 0) ? delayed : x;
+
+        // 2. Input diffusion (3 cascaded allpass filters)
+        for (int d = 0; d < 3; d++) {
+            // allpass: v = x + g * delay_out; y = delay_out - g * v
+            // write v to delay line
+        }
+
+        // 3. FDN core: distribute to 4 channels
+        float inputs[4] = {x, x, x, x};
+
+        // 4. Read from delay lines with LFO modulation
+        float lfo_val = sinf(state->lfo_phase) * state->mod_depth;
+        float outputs[4];
+        for (int ch = 0; ch < 4; ch++) {
+            float delay = (float)state->current_delays[ch];
+            delay += (ch % 2 == 0) ? lfo_val : -lfo_val;
+            if (delay < 1.0f) delay = 1.0f;
+            // Linear interpolation read from circular buffer
+            outputs[ch] = /* delay_line_read(state, ch, delay) */;
+        }
+        state->lfo_phase += state->lfo_phase_inc;
+        if (state->lfo_phase >= 2.0f * M_PI)
+            state->lfo_phase -= 2.0f * M_PI;
+
+        // 5. Per-channel: damping -> DC blocker -> gain
+        float processed[4];
+        for (int ch = 0; ch < 4; ch++) {
+            // One-pole LP: y = x * coeff + y_prev * (1 - coeff)
+            state->damp_state[ch] = outputs[ch] * state->damp_coeff
+                + state->damp_state[ch] * (1.0f - state->damp_coeff);
+            float val = state->damp_state[ch];
+
+            // DC blocker: y = x - x_prev + R * y_prev
+            float dc_y = val - state->dc_x_prev[ch]
+                + state->dc_r * state->dc_y_prev[ch];
+            state->dc_x_prev[ch] = val;
+            state->dc_y_prev[ch] = dc_y;
+            val = dc_y;
+
+            processed[ch] = val * state->channel_gains[ch];
+        }
+
+        // 6. Hadamard butterfly mixing
+        float s0 = processed[0] + processed[1];
+        float s1 = processed[0] - processed[1];
+        float s2 = processed[2] + processed[3];
+        float s3 = processed[2] - processed[3];
+        float mixed[4] = {
+            (s0 + s2) * 0.5f,
+            (s1 + s3) * 0.5f,
+            (s0 - s2) * 0.5f,
+            (s1 - s3) * 0.5f
+        };
+
+        // 7. Write back: input + mixed feedback
+        for (int ch = 0; ch < 4; ch++) {
+            // delay_line_write(state, ch, inputs[ch] + mixed[ch]);
+        }
+
+        // 8. Stereo tap: L = out[0] + out[2], R = out[1] + out[3]
+        float raw_l = outputs[0] + outputs[2];
+        float raw_r = outputs[1] + outputs[3];
+
+        // 9. Width crossmix
+        float final_l = raw_l * wet1 + raw_r * wet2;
+        float final_r = raw_r * wet1 + raw_l * wet2;
+
+        // 10. Hard clip
+        if (final_l > 1.0f) final_l = 1.0f;
+        if (final_l < -1.0f) final_l = -1.0f;
+        if (final_r > 1.0f) final_r = 1.0f;
+        if (final_r < -1.0f) final_r = -1.0f;
+
+        output_left[i] = final_l;
+        output_right[i] = final_r;
+    }
+}
+"""

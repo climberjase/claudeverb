@@ -199,10 +199,12 @@ def test_differs_from_freeverb(mono_impulse):
     out_fdn = fdn.process(mono_impulse.copy())
     out_fv = fv.process(mono_impulse.copy())
 
-    # Shapes may differ; compare only overlapping region
-    min_ch = min(out_fdn.shape[0], out_fv.shape[0])
-    min_len = min(out_fdn.shape[-1], out_fv.shape[-1])
-    assert not np.allclose(out_fdn[:min_ch, :min_len], out_fv[:min_ch, :min_len], atol=1e-5)
+    # FDN produces stereo (2, N), Freeverb may produce mono (N,)
+    # Compare first channel of FDN with Freeverb mono output
+    fdn_ch0 = out_fdn[0] if out_fdn.ndim == 2 else out_fdn
+    fv_ch0 = out_fv[0] if out_fv.ndim == 2 else out_fv
+    min_len = min(len(fdn_ch0), len(fv_ch0))
+    assert not np.allclose(fdn_ch0[:min_len], fv_ch0[:min_len], atol=1e-5)
 
 
 # ---------------------------------------------------------------------------
