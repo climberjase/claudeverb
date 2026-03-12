@@ -29,7 +29,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 **Milestone Goal:** Expand the algorithm library (FDN, Room, Chamber, Dattorro variants), add real-time playback with live parameter tweaking, post-reverb EQ, signal-flow diagrams, and C code export for Daisy Seed.
 
 - [x] **Phase 6: Playback Enhancements & EQ** - Multi-file loading, loop toggle, silence padding, post-reverb EQ, and Dattorro presets
-- [ ] **Phase 7: FDN Reverb Algorithm** - 4-channel Hadamard FDN with coprime delays and per-band decay
+- [x] **Phase 7: FDN Reverb Algorithm** - 4-channel Hadamard FDN with coprime delays and per-band decay (completed 2026-03-12)
 - [ ] **Phase 8: Room, Chamber & Dattorro Variants** - Small/Large Room, Chamber, and three Dattorro topology variants
 - [ ] **Phase 9: Signal-Flow Diagrams & C Export** - Graphviz algorithm diagrams and Jinja2-based C code generation for Daisy Seed
 - [ ] **Phase 10: Real-Time Playback** - Live audio playback with sounddevice and real-time parameter tweaking
@@ -62,7 +62,7 @@ Plans:
   2. FDN output is stable (no blowup or runaway feedback) across all parameter combinations
   3. FDN reverb sounds audibly distinct from Freeverb and Dattorro -- denser, more even decay without metallic coloration
   4. All 6 knobs and 2 switches produce audible, meaningful changes to the FDN output
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 07-01-PLAN.md -- Test scaffold and FDNCore (composable 4-channel Hadamard delay network)
 - [ ] 07-02-PLAN.md -- FDNReverb wrapper, presets, registry integration, and C export
@@ -113,7 +113,7 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 4. Engine + Streamlit UI | v1.0 | 3/3 | Complete | 2026-03-06 |
 | 5. Dattorro Plate Algorithm | v1.0 | 3/3 | Complete | 2026-03-06 |
 | 6. Playback Enhancements & EQ | v1.1 | 3/4 | Gap closure in progress | 2026-03-09 |
-| 7. FDN Reverb Algorithm | v1.1 | 0/2 | Planned | - |
+| 7. FDN Reverb Algorithm | 2/2 | Complete   | 2026-03-12 | - |
 | 8. Room, Chamber & Dattorro Variants | v1.1 | 0/? | Not started | - |
 | 9. Signal-Flow Diagrams & C Export | v1.1 | 0/? | Not started | - |
 | 10. Real-Time Playback | v1.1 | 0/? | Not started | - |

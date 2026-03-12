@@ -2,33 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Plan 1 of 2 complete
-status: executing
-stopped_at: Completed 07-01 FDN Core Engine
-last_updated: "2026-03-12T02:30:22.934Z"
-last_activity: 2026-03-12 -- Completed 07-01 FDN Core Engine
+current_plan: Plan 2 of 2 complete
+status: phase-complete
+stopped_at: Completed 07-02 FDN Reverb Wrapper
+last_updated: "2026-03-12T02:45:37.000Z"
+last_activity: 2026-03-12 -- Completed 07-02 FDN Reverb Wrapper
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
 
-**Last session:** 2026-03-12T02:30:22.932Z
-**Stopped at:** Completed 07-01 FDN Core Engine
+**Last session:** 2026-03-12T02:45:37Z
+**Stopped at:** Completed 07-02 FDN Reverb Wrapper
 **Resume file:** None
 
 ## Current Position
 
-- **Phase:** 7 of 10 (FDN Reverb Algorithm) -- IN PROGRESS
-- **Current Plan:** Plan 1 of 2 complete
-- **Status:** Executing
-- **Last activity:** 2026-03-12 -- Completed 07-01 FDN Core Engine
+- **Phase:** 7 of 10 (FDN Reverb Algorithm) -- COMPLETE
+- **Current Plan:** Plan 2 of 2 complete
+- **Status:** Phase complete
+- **Last activity:** 2026-03-12 -- Completed 07-02 FDN Reverb Wrapper
 
-Progress: [████████░░] 83% (Phase 7 in progress, 1/2 plans done)
+Progress: [██████████] 100% (Phase 7 complete, 2/2 plans done)
 
 ## Project Reference
 
@@ -59,6 +59,10 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - Hadamard butterfly normalized by 0.5 (self-inverse property preserved)
 - OnePole/DCBlocker imported from dattorro_plate.py rather than duplicated
 - FDNReverb stub added to unblock test imports (full implementation in Plan 02)
+- Freeze mode bypasses damping/DC/modulation in FDNCore + 4x output gain for energy preservation
+- OnePole damping coefficient inverted: coeff=1.0 transparent, coeff=0 dark
+- Mix knob applied internally as dry/wet blend for standalone testability
+- FDN registered as 'fdn' with 4 presets: Small Hall, Large Hall, Cathedral, Ambient
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)
