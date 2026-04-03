@@ -15,8 +15,8 @@ Requirements for v1.1 milestone. Each maps to roadmap phases.
 - [x] **ALGO-04**: User can apply Chamber reverb (dense diffusion, even decay, medium space character)
 - [x] **ALGO-05**: User can select Dattorro parameter presets (Small Plate, Large Hall, Shimmer Pad, etc.) from dropdown
 - [x] **ALGO-06**: User can apply Dattorro topology variant with modified tank structure (single-loop tank)
-- [ ] **ALGO-07**: User can apply Dattorro topology variant with extended diffusion (triple-diffuser input)
-- [ ] **ALGO-08**: User can apply Dattorro topology variant with asymmetric tank (wider stereo)
+- [x] **ALGO-07**: User can apply Dattorro topology variant with extended diffusion (triple-diffuser input)
+- [x] **ALGO-08**: User can apply Dattorro topology variant with asymmetric tank (wider stereo)
 
 ### EQ & Signal Chain
 
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALGO-04 | Phase 8 | Complete |
 | ALGO-05 | Phase 6 | Complete |
 | ALGO-06 | Phase 8 | Complete |
-| ALGO-07 | Phase 8 | Pending |
-| ALGO-08 | Phase 8 | Pending |
+| ALGO-07 | Phase 8 | Complete |
+| ALGO-08 | Phase 8 | Complete |
 | EQ-01 | Phase 6 | Complete |
 | EQ-02 | Phase 6 | Complete |
 | PLAY-01 | Phase 6 | Complete |

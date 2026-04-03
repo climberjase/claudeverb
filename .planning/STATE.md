@@ -2,33 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Plan 3 of 4 complete
-status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-04-03T05:28:00Z"
-last_activity: 2026-04-03 -- Completed 08-03 LargeRoom and Chamber
+current_plan: Plan 4 of 4 complete
+status: phase-complete
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-04-03T05:33:20Z"
+last_activity: 2026-04-03 -- Completed 08-04 DattorroTripleDiffuser and DattorroAsymmetric
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
 
-**Last session:** 2026-04-03T05:28:00Z
-**Stopped at:** Completed 08-03-PLAN.md
+**Last session:** 2026-04-03T05:33:20Z
+**Stopped at:** Completed 08-04-PLAN.md
 **Resume file:** None
 
 ## Current Position
 
-- **Phase:** 8 of 10 (Room, Chamber & Dattorro Variants) -- IN PROGRESS
-- **Current Plan:** Plan 3 of 4 complete
-- **Status:** Executing
-- **Last activity:** 2026-04-03 -- Completed 08-03 LargeRoom and Chamber
+- **Phase:** 8 of 10 (Room, Chamber & Dattorro Variants) -- COMPLETE
+- **Current Plan:** Plan 4 of 4 complete
+- **Status:** Phase Complete
+- **Last activity:** 2026-04-03 -- Completed 08-04 DattorroTripleDiffuser and DattorroAsymmetric
 
-Progress: [█████████░] 90% (Phase 8 in progress, 3/4 plans done)
+Progress: [██████████] 100% (Phase 8 complete, all 4/4 plans done)
 
 ## Project Reference
 
@@ -78,6 +78,11 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - LargeRoom: 8 taps + 2 diffusers + large FDN primes (887-1879) for spacious character
 - Chamber: 4 taps + 3 diffusers + medium FDN primes (659-1381) for dense warm character
 - Chamber diffuser_feedback 0.55 (vs 0.5 for rooms) for denser diffusion
+- Triple-Diffuser: Diffusion Density maps 0-100 to 2.0-6.0 active count with coefficient crossfade
+- Asymmetric: left_scale=1.0-0.2*s, right_scale=1.0+0.25*s for max ratio 1.5625:1
+- Separate rt60_to_gain feedback gains for L and R total path delays in Asymmetric
+- L decay AP2 fades to 0 at spread >= 50 for diffuser count asymmetry
+- Freeze bypasses damping+DC+modulation in Triple-Diffuser and Asymmetric (freeze_gain=2x)
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)
