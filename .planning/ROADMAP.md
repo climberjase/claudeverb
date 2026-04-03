@@ -76,7 +76,7 @@ Plans:
   2. Room algorithms produce audible early reflections (discrete echoes before diffuse tail) that distinguish them from plate reverbs
   3. User can select three Dattorro topology variants (single-loop tank, triple-diffuser, asymmetric tank) and hear differences from the standard Plate
   4. All new algorithms appear in the dropdown, have 6 knobs + 2 switches, and produce stable output across all parameter ranges
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 Plans:
 - [ ] 08-01-PLAN.md -- EarlyReflections composable class, RoomReverbBase, and SmallRoom algorithm
 - [ ] 08-02-PLAN.md -- Dattorro Single-Loop Tank (Griesinger-style single feedback ring)
@@ -119,6 +119,6 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 5. Dattorro Plate Algorithm | v1.0 | 3/3 | Complete | 2026-03-06 |
 | 6. Playback Enhancements & EQ | v1.1 | 3/4 | Gap closure in progress | 2026-03-09 |
 | 7. FDN Reverb Algorithm | 2/2 | Complete   | 2026-03-12 | - |
-| 8. Room, Chamber & Dattorro Variants | 1/4 | In Progress|  | - |
+| 8. Room, Chamber & Dattorro Variants | 2/4 | In Progress|  | - |
 | 9. Signal-Flow Diagrams & C Export | v1.1 | 0/? | Not started | - |
 | 10. Real-Time Playback | v1.1 | 0/? | Not started | - |

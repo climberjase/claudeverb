@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Plan 2 of 4
+current_plan: Plan 2 of 4 complete
 status: executing
-stopped_at: Completed 08-02 DattorroSingleLoop
-last_updated: "2026-04-03T05:10:02Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-04-03T05:13:02.830Z"
 last_activity: 2026-04-03 -- Completed 08-02 DattorroSingleLoop
 progress:
   total_phases: 5
@@ -17,8 +17,8 @@ progress:
 
 # Project State
 
-**Last session:** 2026-04-03T04:38:28Z
-**Stopped at:** Completed 08-02 DattorroSingleLoop
+**Last session:** 2026-04-03T05:13:02.827Z
+**Stopped at:** Completed 08-01-PLAN.md
 **Resume file:** None
 
 ## Current Position
@@ -65,6 +65,10 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - FDN registered as 'fdn' with 4 presets: Small Hall, Large Hall, Cathedral, Ambient
 
 **Phase 8 decisions:**
+- EarlyReflections uses single DelayLine with multi-tap reads, alternating L/R panning
+- ER Level crossfade: FDN always receives ER mono sum regardless of ER Level knob
+- RoomReverbBase pattern: subclass overrides _get_config() for algorithm-specific tuning
+- Output normalized by 1/sqrt(num_taps) to prevent ER->FDN gain staging issues
 - Single-loop base delays: AP [240, 384, 528, 336] + D [720, 1056, 864, 1200] at 48kHz (~111ms total)
 - Damping at 2 points in loop (after D1 and D3) with DC blocker at junction
 - Freeze output gain 3x for single-loop geometry energy compensation
