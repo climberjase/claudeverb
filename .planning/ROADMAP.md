@@ -31,7 +31,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 - [x] **Phase 6: Playback Enhancements & EQ** - Multi-file loading, loop toggle, silence padding, post-reverb EQ, and Dattorro presets
 - [x] **Phase 7: FDN Reverb Algorithm** - 4-channel Hadamard FDN with coprime delays and per-band decay (completed 2026-03-12)
 - [x] **Phase 8: Room, Chamber & Dattorro Variants** - Small/Large Room, Chamber, and three Dattorro topology variants (completed 2026-04-03)
-- [ ] **Phase 9: Signal-Flow Diagrams & C Export** - Graphviz algorithm diagrams and Jinja2-based C code generation for Daisy Seed
+- [ ] **Phase 9: Signal-Flow Diagrams & C Export** - Graphviz algorithm diagrams and f-string-based C code generation for Daisy Seed
 - [ ] **Phase 10: Real-Time Playback** - Live audio playback with sounddevice and real-time parameter tweaking
 
 ## Phase Details
@@ -93,7 +93,11 @@ Plans:
   3. Exported C code includes the user's current parameter settings as default values in comments
   4. User can see estimated RAM usage in KB before exporting, helping decide if the algorithm fits on hardware
   5. Exported code includes an AudioCallback template matching the Hothouse pedal's knob/switch layout
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 09-01-PLAN.md -- Signal-flow DOT diagram generation for all 9 algorithms (to_dot + dot_builder)
+- [ ] 09-02-PLAN.md -- C export pipeline: missing methods, header/source generation, RAM estimation, AudioCallback
+- [ ] 09-03-PLAN.md -- Streamlit UI integration for diagrams and export workflow
 
 ### Phase 10: Real-Time Playback
 **Goal**: Users can hear reverb changes instantly by tweaking knobs during live audio playback
@@ -120,5 +124,5 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 6. Playback Enhancements & EQ | v1.1 | 3/4 | Gap closure in progress | 2026-03-09 |
 | 7. FDN Reverb Algorithm | 2/2 | Complete   | 2026-03-12 | - |
 | 8. Room, Chamber & Dattorro Variants | 4/4 | Complete   | 2026-04-03 | - |
-| 9. Signal-Flow Diagrams & C Export | v1.1 | 0/? | Not started | - |
+| 9. Signal-Flow Diagrams & C Export | v1.1 | 0/3 | Planned | - |
 | 10. Real-Time Playback | v1.1 | 0/? | Not started | - |
