@@ -2,33 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Not started
-status: planning
-stopped_at: Completed 07-02 FDN Reverb Wrapper
-last_updated: "2026-03-12T02:58:39.119Z"
-last_activity: 2026-03-12 -- Completed 07-02 FDN Reverb Wrapper
+current_plan: Plan 2 of 4
+status: executing
+stopped_at: Completed 08-02 DattorroSingleLoop
+last_updated: "2026-04-03T05:10:02Z"
+last_activity: 2026-04-03 -- Completed 08-02 DattorroSingleLoop
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 10
+  completed_plans: 8
+  percent: 80
 ---
 
 # Project State
 
-**Last session:** 2026-03-12T02:45:37Z
-**Stopped at:** Completed 07-02 FDN Reverb Wrapper
+**Last session:** 2026-04-03T04:38:28Z
+**Stopped at:** Completed 08-02 DattorroSingleLoop
 **Resume file:** None
 
 ## Current Position
 
-- **Phase:** 7 of 10 (FDN Reverb Algorithm) -- COMPLETE
-- **Current Plan:** Not started
-- **Status:** Ready to plan
-- **Last activity:** 2026-03-12 -- Completed 07-02 FDN Reverb Wrapper
+- **Phase:** 8 of 10 (Room, Chamber & Dattorro Variants) -- IN PROGRESS
+- **Current Plan:** Plan 2 of 4 complete
+- **Status:** Executing
+- **Last activity:** 2026-04-03 -- Completed 08-02 DattorroSingleLoop
 
-Progress: [██████████] 100% (Phase 7 complete, 2/2 plans done)
+Progress: [████████░░] 80% (Phase 8 in progress, 2/4 plans done)
 
 ## Project Reference
 
@@ -63,6 +63,14 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - OnePole damping coefficient inverted: coeff=1.0 transparent, coeff=0 dark
 - Mix knob applied internally as dry/wet blend for standalone testability
 - FDN registered as 'fdn' with 4 presets: Small Hall, Large Hall, Cathedral, Ambient
+
+**Phase 8 decisions:**
+- Single-loop base delays: AP [240, 384, 528, 336] + D [720, 1056, 864, 1200] at 48kHz (~111ms total)
+- Damping at 2 points in loop (after D1 and D3) with DC blocker at junction
+- Freeze output gain 3x for single-loop geometry energy compensation
+- Loop Length scale 0.375-1.875 maps knob 0-100 to ~42ms-208ms total loop
+- Loop allpass feedback coefficient 0.6 (moderate diffusion)
+- Modulation on D1 only, depth 0-8 samples, rate 0.1-2.0 Hz
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)
