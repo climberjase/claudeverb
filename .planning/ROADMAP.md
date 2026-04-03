@@ -30,7 +30,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 
 - [x] **Phase 6: Playback Enhancements & EQ** - Multi-file loading, loop toggle, silence padding, post-reverb EQ, and Dattorro presets
 - [x] **Phase 7: FDN Reverb Algorithm** - 4-channel Hadamard FDN with coprime delays and per-band decay (completed 2026-03-12)
-- [ ] **Phase 8: Room, Chamber & Dattorro Variants** - Small/Large Room, Chamber, and three Dattorro topology variants
+- [x] **Phase 8: Room, Chamber & Dattorro Variants** - Small/Large Room, Chamber, and three Dattorro topology variants (completed 2026-04-03)
 - [ ] **Phase 9: Signal-Flow Diagrams & C Export** - Graphviz algorithm diagrams and Jinja2-based C code generation for Daisy Seed
 - [ ] **Phase 10: Real-Time Playback** - Live audio playback with sounddevice and real-time parameter tweaking
 
@@ -76,7 +76,12 @@ Plans:
   2. Room algorithms produce audible early reflections (discrete echoes before diffuse tail) that distinguish them from plate reverbs
   3. User can select three Dattorro topology variants (single-loop tank, triple-diffuser, asymmetric tank) and hear differences from the standard Plate
   4. All new algorithms appear in the dropdown, have 6 knobs + 2 switches, and produce stable output across all parameter ranges
-**Plans**: TBD
+**Plans:** 4/4 plans complete
+Plans:
+- [ ] 08-01-PLAN.md -- EarlyReflections composable class, RoomReverbBase, and SmallRoom algorithm
+- [ ] 08-02-PLAN.md -- Dattorro Single-Loop Tank (Griesinger-style single feedback ring)
+- [ ] 08-03-PLAN.md -- LargeRoom and Chamber algorithms with presets
+- [ ] 08-04-PLAN.md -- Dattorro Triple-Diffuser and Asymmetric Tank with presets
 
 ### Phase 9: Signal-Flow Diagrams & C Export
 **Goal**: Users can visualize algorithm topology and export working C code for the Daisy Seed Hothouse pedal
@@ -114,6 +119,6 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 5. Dattorro Plate Algorithm | v1.0 | 3/3 | Complete | 2026-03-06 |
 | 6. Playback Enhancements & EQ | v1.1 | 3/4 | Gap closure in progress | 2026-03-09 |
 | 7. FDN Reverb Algorithm | 2/2 | Complete   | 2026-03-12 | - |
-| 8. Room, Chamber & Dattorro Variants | v1.1 | 0/? | Not started | - |
+| 8. Room, Chamber & Dattorro Variants | 4/4 | Complete   | 2026-04-03 | - |
 | 9. Signal-Flow Diagrams & C Export | v1.1 | 0/? | Not started | - |
 | 10. Real-Time Playback | v1.1 | 0/? | Not started | - |

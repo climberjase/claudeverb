@@ -26,7 +26,14 @@
       "Bash(.venv/bin/pytest:*)",
       "Bash(/Users/jasondoherty/Documents/SRC/claudeverb/.venv/bin/python:*)",
       "Skill(gsd:plan-milestone-gaps)",
-      "Bash(echo exit: $?:*)"
+      "Bash(echo exit: $?:*)",
+      "WebFetch(domain:ccrma.stanford.edu)",
+      "WebFetch(domain:tre.ucsd.edu)",
+      "WebFetch(domain:christianfloisand.wordpress.com)",
+      "WebFetch(domain:valhalladsp.com)",
+      "WebFetch(domain:signalsmith-audio.co.uk)",
+      "WebFetch(domain:freeverb3-vst.sourceforge.io)",
+      "WebFetch(domain:deepwiki.com)"
     ]
   }
 }
