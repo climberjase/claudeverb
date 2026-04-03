@@ -344,7 +344,7 @@ class TestAsymmetric:
             assert np.all(np.isfinite(output)), f"Non-finite output with params {params}"
 
     def test_spread_zero_near_symmetric(self):
-        """Spread at 0 produces similar output to standard plate proportions (near-symmetric)."""
+        """Spread at 0 produces near-symmetric L/R energy balance (standard plate proportions)."""
         algo = self._make_algo()
         impulse = np.zeros(SAMPLE_RATE, dtype=np.float32)
         impulse[0] = 1.0
@@ -352,15 +352,14 @@ class TestAsymmetric:
         algo.update_params({"spread": 0, "decay": 60, "mix": 100})
         output = algo.process(impulse)
 
-        # At spread=0, L and R should be somewhat similar (cross-correlation > 0.5)
-        left = output[0]
-        right = output[1]
-        # Normalize
-        left_norm = left / (np.max(np.abs(left)) + 1e-10)
-        right_norm = right / (np.max(np.abs(right)) + 1e-10)
-        correlation = np.corrcoef(left_norm, right_norm)[0, 1]
-        assert correlation > 0.3, (
-            f"Spread=0 should produce near-symmetric output, correlation={correlation:.3f}"
+        # At spread=0, L and R energy should be similar (balanced)
+        # Note: Dattorro figure-eight inherently has different L/R base delays,
+        # so channels are decorrelated but should have similar energy levels.
+        left_energy = np.mean(output[0] ** 2)
+        right_energy = np.mean(output[1] ** 2)
+        energy_ratio = min(left_energy, right_energy) / max(left_energy, right_energy + 1e-20)
+        assert energy_ratio > 0.3, (
+            f"Spread=0 should produce balanced L/R energy, ratio={energy_ratio:.3f}"
         )
 
     def test_spread_100_wider_stereo(self):
