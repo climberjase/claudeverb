@@ -2,33 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Plan 2 of 4 complete
+current_plan: Plan 3 of 4 complete
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-04-03T05:13:02.830Z"
-last_activity: 2026-04-03 -- Completed 08-02 DattorroSingleLoop
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-04-03T05:28:00Z"
+last_activity: 2026-04-03 -- Completed 08-03 LargeRoom and Chamber
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
 
-**Last session:** 2026-04-03T05:13:02.827Z
-**Stopped at:** Completed 08-01-PLAN.md
+**Last session:** 2026-04-03T05:28:00Z
+**Stopped at:** Completed 08-03-PLAN.md
 **Resume file:** None
 
 ## Current Position
 
 - **Phase:** 8 of 10 (Room, Chamber & Dattorro Variants) -- IN PROGRESS
-- **Current Plan:** Plan 2 of 4 complete
+- **Current Plan:** Plan 3 of 4 complete
 - **Status:** Executing
-- **Last activity:** 2026-04-03 -- Completed 08-02 DattorroSingleLoop
+- **Last activity:** 2026-04-03 -- Completed 08-03 LargeRoom and Chamber
 
-Progress: [████████░░] 80% (Phase 8 in progress, 2/4 plans done)
+Progress: [█████████░] 90% (Phase 8 in progress, 3/4 plans done)
 
 ## Project Reference
 
@@ -75,6 +75,9 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - Loop Length scale 0.375-1.875 maps knob 0-100 to ~42ms-208ms total loop
 - Loop allpass feedback coefficient 0.6 (moderate diffusion)
 - Modulation on D1 only, depth 0-8 samples, rate 0.1-2.0 Hz
+- LargeRoom: 8 taps + 2 diffusers + large FDN primes (887-1879) for spacious character
+- Chamber: 4 taps + 3 diffusers + medium FDN primes (659-1381) for dense warm character
+- Chamber diffuser_feedback 0.55 (vs 0.5 for rooms) for denser diffusion
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)
