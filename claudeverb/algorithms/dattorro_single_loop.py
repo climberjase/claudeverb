@@ -473,6 +473,92 @@ class DattorroSingleLoop(ReverbAlgorithm):
             },
         }
 
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for DattorroSingleLoop signal flow."""
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        decay = p.get("decay", 60)
+        loop_len = p.get("loop_length", 50)
+        damp = p.get("damping", 40)
+        mod = p.get("mod", 30)
+        mix_val = p.get("mix", 50)
+        pre_d = p.get("pre_delay", 10)
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += edge("input", "pre_delay")
+
+            # 4 input diffusers
+            idiff_nodes = ""
+            for i, (length, coeff) in enumerate(zip(INPUT_AP_LENGTHS_29761, INPUT_AP_COEFFS)):
+                scaled = _scale_29761(length)
+                idiff_nodes += dsp_node(f"iap{i}", f"Input AP {i}\\n[{scaled} smp]\\ncoeff: {coeff}")
+            body += subgraph("input_diff", "Input Diffusers", idiff_nodes)
+
+            body += edge("pre_delay", "iap0")
+            for i in range(3):
+                body += edge(f"iap{i}", f"iap{i+1}")
+
+            # Single feedback ring: AP0->D0->AP1->D1->AP2->D2->AP3->D3
+            ring_nodes = ""
+            for i in range(4):
+                ring_nodes += dsp_node(f"lap{i}", f"Loop AP{i}\\n[{LOOP_AP_BASE[i]} smp]\\nfb: {LOOP_AP_COEFF}")
+                ring_nodes += dsp_node(f"ld{i}", f"Loop D{i}\\n[{LOOP_D_BASE[i]} smp]")
+            ring_nodes += dsp_node("damp1", f"Damping 1\\n[{damp}]")
+            ring_nodes += dsp_node("damp2", f"Damping 2\\n[{damp}]")
+            ring_nodes += dsp_node("dc_blk", "DC Blocker")
+            ring_nodes += dsp_node("lfo", f"LFO\\nmod: {mod}")
+            body += subgraph("ring", f"Single Loop (len: {loop_len})", ring_nodes)
+
+            body += edge("iap3", "lap0")
+            body += edge("lap0", "ld0")
+            body += edge("ld0", "damp1")
+            body += edge("damp1", "lap1")
+            body += edge("lap1", "ld1")
+            body += edge("ld1", "lap2")
+            body += edge("lap2", "ld2")
+            body += edge("ld2", "damp2")
+            body += edge("damp2", "lap3")
+            body += edge("lap3", "ld3")
+            body += edge("ld3", "dc_blk")
+            body += feedback_edge("dc_blk", "lap0", label=f"decay: {decay}")
+            body += edge("lfo", "ld0", style="dotted", color="blue")
+
+            body += dsp_node("stereo_tap", f"Stereo Taps\\nmix: {mix_val}")
+            body += io_node("output", "Output")
+
+            body += edge("ld0", "stereo_tap", style="dotted")
+            body += edge("ld1", "stereo_tap", style="dotted")
+            body += edge("ld2", "stereo_tap", style="dotted")
+            body += edge("ld3", "stereo_tap", style="dotted")
+            body += edge("stereo_tap", "output")
+
+            return digraph_wrap("DattorroSingleLoop", body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("input_diff", f"4 Input Diffusers")
+            body += dsp_node("single_loop", f"Single Loop\\ndecay: {decay}\\nlen: {loop_len}\\ndamp: {damp}")
+            body += dsp_node("mod_block", f"LFO Mod\\n[{mod}]")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "input_diff")
+            body += edge("input_diff", "single_loop")
+            body += edge("mod_block", "single_loop", style="dotted", color="blue")
+            body += feedback_edge("single_loop", "single_loop", label="feedback")
+            body += edge("single_loop", "output", label=f"mix: {mix_val}")
+
+            return digraph_wrap("DattorroSingleLoop", body)
+
     def to_c_struct(self) -> str:
         """Return C typedef struct for the Single-Loop Tank state."""
         # Compute max buffer sizes at max scale

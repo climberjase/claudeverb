@@ -512,6 +512,113 @@ class DattorroTripleDiffuser(ReverbAlgorithm):
             },
         }
 
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for DattorroTripleDiffuser signal flow."""
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        decay = p.get("decay", 60)
+        density = p.get("diffusion_density", 70)
+        damp = p.get("damping", 30)
+        mod = p.get("mod", 30)
+        mix_val = p.get("mix", 50)
+        pre_d = p.get("pre_delay", 10)
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += edge("input", "pre_delay")
+
+            # 6 input allpass diffusers
+            idiff_nodes = ""
+            for i, (length, coeff) in enumerate(zip(INPUT_AP_LENGTHS_6, INPUT_AP_COEFFS_6)):
+                scaled = _scale_length(length)
+                idiff_nodes += dsp_node(f"iap{i}", f"Input AP {i}\\n[{scaled} smp]\\ncoeff: {coeff}")
+            body += subgraph("input_diff", f"6 Input Diffusers (density: {density})", idiff_nodes)
+
+            body += edge("pre_delay", "iap0")
+            for i in range(5):
+                body += edge(f"iap{i}", f"iap{i+1}")
+
+            # Left tank half
+            lt_nodes = ""
+            lt_nodes += dsp_node("dap1_l", f"Decay AP1 L\\n[{_scale_length(DECAY_AP1_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("td1_l", f"Delay 1 L (mod)\\n[{_scale_length(TANK_DELAY1_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("damp_l", f"Damping L\\n[{damp}]")
+            lt_nodes += dsp_node("dap2_l", f"Decay AP2 L\\n[{_scale_length(DECAY_AP2_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("td2_l", f"Delay 2 L\\n[{_scale_length(TANK_DELAY2_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("dc_l", "DC Block L")
+            body += subgraph("tank_left", "Left Tank", lt_nodes)
+
+            # Right tank half
+            rt_nodes = ""
+            rt_nodes += dsp_node("dap1_r", f"Decay AP1 R\\n[{_scale_length(DECAY_AP1_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("td1_r", f"Delay 1 R (mod)\\n[{_scale_length(TANK_DELAY1_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("damp_r", f"Damping R\\n[{damp}]")
+            rt_nodes += dsp_node("dap2_r", f"Decay AP2 R\\n[{_scale_length(DECAY_AP2_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("td2_r", f"Delay 2 R\\n[{_scale_length(TANK_DELAY2_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("dc_r", "DC Block R")
+            body += subgraph("tank_right", "Right Tank", rt_nodes)
+
+            body += dsp_node("lfo", f"LFO\\nmod: {mod}")
+            body += io_node("output", "Output")
+
+            # Left tank flow
+            body += edge("iap5", "dap1_l")
+            body += edge("dap1_l", "td1_l")
+            body += edge("td1_l", "damp_l")
+            body += edge("damp_l", "dap2_l")
+            body += edge("dap2_l", "td2_l")
+            body += edge("td2_l", "dc_l")
+
+            # Right tank flow
+            body += edge("iap5", "dap1_r")
+            body += edge("dap1_r", "td1_r")
+            body += edge("td1_r", "damp_r")
+            body += edge("damp_r", "dap2_r")
+            body += edge("dap2_r", "td2_r")
+            body += edge("td2_r", "dc_r")
+
+            # Cross-feedback
+            body += feedback_edge("dc_r", "dap1_l", label=f"decay: {decay}")
+            body += feedback_edge("dc_l", "dap1_r", label=f"decay: {decay}")
+
+            # LFO
+            body += edge("lfo", "td1_l", style="dotted", color="blue")
+            body += edge("lfo", "td1_r", style="dotted", color="blue")
+
+            body += edge("dc_l", "output")
+            body += edge("dc_r", "output")
+
+            return digraph_wrap("DattorroTripleDiffuser", body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("input_diff", f"6 Input Diffusers\\ndensity: {density}")
+            body += dsp_node("tank_left", f"Tank Left\\ndecay: {decay}")
+            body += dsp_node("tank_right", f"Tank Right\\ndecay: {decay}")
+            body += dsp_node("lfo_mod", f"LFO Mod\\n[{mod}]")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "input_diff")
+            body += edge("input_diff", "tank_left")
+            body += edge("input_diff", "tank_right")
+            body += edge("tank_left", "output")
+            body += edge("tank_right", "output")
+            body += feedback_edge("tank_right", "tank_left", label="cross-fb")
+            body += feedback_edge("tank_left", "tank_right", label="cross-fb")
+            body += edge("lfo_mod", "tank_left", style="dotted", color="blue")
+            body += edge("lfo_mod", "tank_right", style="dotted", color="blue")
+
+            return digraph_wrap("DattorroTripleDiffuser", body)
+
     def to_c_struct(self) -> str:
         """Return C typedef struct for the Triple-Diffuser state."""
         input_ap_sizes = [_scale_length(l) for l in INPUT_AP_LENGTHS_6]

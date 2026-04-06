@@ -328,6 +328,112 @@ class RoomReverbBase(ReverbAlgorithm):
             },
         }
 
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for Room/Chamber reverb signal flow."""
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        decay = p.get("decay", 50)
+        size = p.get("size", 50)
+        damp = p.get("damping", 40)
+        er_lev = p.get("er_level", 40)
+        mix_val = p.get("mix", 50)
+        pre_d = p.get("pre_delay", 10)
+
+        cfg = self._config
+        algo_name = type(self).__name__
+        num_taps = len(cfg["tap_delays"])
+        num_diffusers = len(cfg.get("diffuser_delays", []))
+        fdn_delays = cfg["fdn_delays"]
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += edge("input", "pre_delay")
+
+            # ER taps
+            er_nodes = ""
+            for i, (delay, gain) in enumerate(zip(cfg["tap_delays"], cfg["tap_gains"])):
+                er_nodes += dsp_node(f"tap{i}", f"ER Tap {i}\\n[{delay} smp]\\ngain: {gain:.2f}")
+            # ER diffusers
+            for i, dd in enumerate(cfg.get("diffuser_delays", [])):
+                er_nodes += dsp_node(f"er_diff{i}", f"ER Diffuser {i}\\n[{dd} smp]")
+            body += subgraph("early_ref", f"Early Reflections ({num_taps} taps)", er_nodes)
+
+            body += edge("pre_delay", "tap0")
+            for i in range(1, num_taps):
+                body += edge("pre_delay", f"tap{i}")
+
+            # Connect ER diffusers after taps
+            if num_diffusers > 0:
+                body += dsp_node("er_sum", "ER Sum")
+                for i in range(num_taps):
+                    body += edge(f"tap{i}", "er_sum")
+                body += edge("er_sum", "er_diff0")
+                for i in range(num_diffusers - 1):
+                    body += edge(f"er_diff{i}", f"er_diff{i+1}")
+                last_er = f"er_diff{num_diffusers - 1}"
+            else:
+                body += dsp_node("er_sum", "ER Sum")
+                for i in range(num_taps):
+                    body += edge(f"tap{i}", "er_sum")
+                last_er = "er_sum"
+
+            # FDN channels
+            fdn_nodes = ""
+            for i, d in enumerate(fdn_delays):
+                fdn_nodes += dsp_node(f"fdn_d{i}", f"FDN Ch{i}\\n[{d} smp]")
+                fdn_nodes += dsp_node(f"fdn_damp{i}", f"Damp {i}")
+            fdn_nodes += dsp_node("hadamard", "Hadamard Mix")
+            body += subgraph("fdn", f"FDN ({len(fdn_delays)} channels, decay: {decay})", fdn_nodes)
+
+            body += edge(last_er, "fdn_d0")
+            body += edge(last_er, "fdn_d1")
+            body += edge(last_er, "fdn_d2")
+            body += edge(last_er, "fdn_d3")
+
+            for i in range(4):
+                body += edge(f"fdn_d{i}", f"fdn_damp{i}")
+                body += edge(f"fdn_damp{i}", "hadamard")
+            for i in range(4):
+                body += feedback_edge("hadamard", f"fdn_d{i}")
+
+            body += dsp_node("er_crossfade", f"ER/FDN Crossfade\\ner_level: {er_lev}")
+            body += dsp_node("stereo_mix", f"Stereo Mix\\nmix: {mix_val}")
+            body += io_node("output", "Output")
+
+            body += edge(last_er, "er_crossfade", label="ER")
+            body += edge("hadamard", "er_crossfade", label="FDN")
+            body += edge("er_crossfade", "stereo_mix")
+            body += edge("stereo_mix", "output")
+
+            return digraph_wrap(algo_name, body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("early_ref", f"Early Reflections\\n{num_taps} taps, {num_diffusers} diffusers")
+            body += dsp_node("fdn", f"Late Reverb (FDN)\\ndecay: {decay}\\nsize: {size}")
+            body += dsp_node("er_xfade", f"ER/FDN Crossfade\\ner_level: {er_lev}")
+            body += dsp_node("stereo_mix", f"Stereo Mix\\nmix: {mix_val}\\ndamp: {damp}")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "early_ref")
+            body += edge("early_ref", "fdn")
+            body += edge("early_ref", "er_xfade", label="ER path")
+            body += edge("fdn", "er_xfade", label="FDN path")
+            body += feedback_edge("fdn", "fdn", label="feedback")
+            body += edge("er_xfade", "stereo_mix")
+            body += edge("stereo_mix", "output")
+
+            return digraph_wrap(algo_name, body)
+
     def to_c_struct(self) -> str:
         """Return C typedef struct for the room reverb state."""
         return """\
