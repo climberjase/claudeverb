@@ -526,6 +526,90 @@ class FDNReverb(ReverbAlgorithm):
             },
         }
 
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for FDN Reverb signal flow."""
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        decay_t = p.get("decay_time", 50)
+        size = p.get("size", 50)
+        damp = p.get("damping", 40)
+        mod = p.get("modulation", 30)
+        mix_val = p.get("mix", 75)
+        pre_d = p.get("pre_delay", 0)
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += edge("input", "pre_delay")
+
+            # 3 input diffusers
+            diff_nodes = ""
+            for i, (length, fb) in enumerate([(149, 0.5), (233, 0.5), (347, 0.5)]):
+                diff_nodes += dsp_node(f"diff{i}", f"Diffuser {i}\\n[{length} smp]\\nfb: {fb}")
+            body += subgraph("diffusers", "Input Diffusion", diff_nodes)
+
+            body += edge("pre_delay", "diff0")
+            body += edge("diff0", "diff1")
+            body += edge("diff1", "diff2")
+
+            # 4 delay channels
+            ch_nodes = ""
+            for i, d in enumerate(BASE_DELAYS):
+                ch_nodes += dsp_node(f"delay{i}", f"Delay Ch{i}\\n[{d} smp]")
+                ch_nodes += dsp_node(f"damp{i}", f"Damping {i}\\n[{damp}]")
+                ch_nodes += dsp_node(f"dc{i}", f"DC Block {i}")
+            body += subgraph("channels", f"4 FDN Channels (size: {size})", ch_nodes)
+
+            for i in range(4):
+                body += edge("diff2", f"delay{i}")
+                body += edge(f"delay{i}", f"damp{i}")
+                body += edge(f"damp{i}", f"dc{i}")
+
+            body += dsp_node("hadamard", "Hadamard Mix\\n(4x4 butterfly)")
+            body += dsp_node("lfo", f"LFO Mod\\n[{mod}]")
+            body += dsp_node("stereo_tap", f"Stereo Tap\\nmix: {mix_val}")
+            body += io_node("output", "Output")
+
+            for i in range(4):
+                body += edge(f"dc{i}", "hadamard")
+            body += feedback_edge("hadamard", "delay0", label=f"decay: {decay_t}")
+            body += feedback_edge("hadamard", "delay1")
+            body += feedback_edge("hadamard", "delay2")
+            body += feedback_edge("hadamard", "delay3")
+            body += edge("lfo", "delay0", style="dotted", color="blue")
+            body += edge("lfo", "delay2", style="dotted", color="blue")
+
+            for i in range(4):
+                body += edge(f"delay{i}", "stereo_tap", style="dotted")
+            body += edge("stereo_tap", "output")
+
+            return digraph_wrap("FDNReverb", body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("diffusers", "3 Input Diffusers")
+            body += dsp_node("delays", f"4-Ch Delays\\n[{BASE_DELAYS}]\\nsize: {size}")
+            body += dsp_node("hadamard", f"Hadamard Mix\\ndecay: {decay_t}")
+            body += dsp_node("damping", f"Damping\\n[{damp}]\\nmod: {mod}")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "diffusers")
+            body += edge("diffusers", "delays")
+            body += edge("delays", "hadamard")
+            body += edge("hadamard", "damping")
+            body += feedback_edge("damping", "delays", label="feedback")
+            body += edge("delays", "output", label="stereo tap")
+
+            return digraph_wrap("FDNReverb", body)
+
     def to_c_struct(self) -> str:
         """Return C typedef struct for the FDN reverb state."""
         return """\

@@ -20,6 +20,13 @@ from claudeverb.algorithms.dattorro_presets import get_preset, list_presets
 from claudeverb.audio.samples import get_sample, list_all_samples
 from claudeverb.config import SAMPLE_RATE
 from claudeverb import engine
+from claudeverb.export.c_export import (
+    generate_header,
+    generate_source,
+    generate_audio_callback,
+    estimate_ram,
+    export_to_files,
+)
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -34,6 +41,14 @@ st.set_page_config(page_title="ClaudeVerb", layout="wide")
 for key in ["dry_audio", "wet_audio", "results", "audio_loaded", "original_length"]:
     if key not in st.session_state:
         st.session_state[key] = None
+
+# Export-related session state
+if "export_preview" not in st.session_state:
+    st.session_state["export_preview"] = False
+if "knob_mapping" not in st.session_state:
+    st.session_state["knob_mapping"] = {}
+if "export_algo" not in st.session_state:
+    st.session_state["export_algo"] = None
 
 
 def _audio_to_wav_bytes(audio: np.ndarray) -> bytes:
@@ -106,6 +121,10 @@ with st.sidebar:
             st.session_state[k] = None
         st.session_state.pop("preset_name", None)
         st.session_state.pop("_preset_values", None)
+        # Reset export state when algorithm changes
+        st.session_state["knob_mapping"] = {}
+        st.session_state["export_preview"] = False
+        st.session_state["export_algo"] = algo_name
         st.session_state["current_algo"] = algo_name
         st.rerun()
     st.session_state.setdefault("current_algo", algo_name)
@@ -216,6 +235,136 @@ with st.sidebar:
         "Process", type="primary", width="stretch"
     )
 
+    # -- C Export --
+    st.divider()
+    st.subheader("C Export")
+
+    # Track algorithm for export state reset
+    if st.session_state.get("export_algo") != algo_name:
+        st.session_state["knob_mapping"] = {}
+        st.session_state["export_preview"] = False
+        st.session_state["export_algo"] = algo_name
+
+    export_clicked = st.button("Export to C")
+    if export_clicked:
+        st.session_state["export_preview"] = True
+
+    if st.session_state.get("export_preview"):
+        # Separate knob and switch params
+        knob_params = [
+            (name, spec) for name, spec in specs.items()
+            if spec["type"] == "knob" and name != "mix"
+        ]
+        switch_params = [
+            (name, spec) for name, spec in specs.items()
+            if spec["type"] == "switch"
+        ]
+        knob_param_names = [name for name, _ in knob_params]
+
+        with st.expander("Knob & Switch Mapping", expanded=True):
+            st.markdown("**Hothouse Knob Mapping**")
+            knob_mapping = {}
+            for i in range(6):
+                knob_id = f"KNOB_{i + 1}"
+                default_idx = i if i < len(knob_param_names) else 0
+                options = ["(none)"] + knob_param_names
+                selected = st.selectbox(
+                    knob_id,
+                    options,
+                    index=min(default_idx + 1, len(options) - 1)
+                    if i < len(knob_param_names)
+                    else 0,
+                    key=f"export_knob_{i}",
+                )
+                if selected != "(none)":
+                    knob_mapping[selected] = knob_id
+
+            st.markdown("**Toggle Switch Mapping**")
+            switch_param_names = [name for name, _ in switch_params]
+            for i in range(2):
+                switch_id = f"TOGGLESWITCH_{i + 1}"
+                options = ["(none)"] + switch_param_names
+                default_idx = i if i < len(switch_param_names) else 0
+                st.selectbox(
+                    switch_id,
+                    options,
+                    index=min(default_idx + 1, len(options) - 1)
+                    if i < len(switch_param_names)
+                    else 0,
+                    key=f"export_switch_{i}",
+                )
+            st.caption("TOGGLESWITCH_3 reserved for bypass")
+
+            st.session_state["knob_mapping"] = knob_mapping
+
+        # RAM Estimation
+        with st.expander("RAM Estimation", expanded=True):
+            ram = estimate_ram(algo_instance)
+            col_ram1, col_ram2 = st.columns(2)
+            with col_ram1:
+                st.markdown(f"**Delay lines:** {ram['delay_lines_kb']:.1f} KB")
+                st.markdown(f"**Filters:** {ram['filters_kb']:.1f} KB")
+                st.markdown(f"**Matrices:** {ram['matrices_kb']:.1f} KB")
+            with col_ram2:
+                st.markdown(f"**Total:** {ram['total_kb']:.1f} KB")
+                if ram["fits_sram"]:
+                    st.success("Fits in SRAM (512 KB)")
+                elif ram["fits_sdram"]:
+                    st.warning("Needs SDRAM (>512 KB)")
+                else:
+                    st.error("Too large for SDRAM (>64 MB)")
+
+            if ram["sdram_candidates"]:
+                st.markdown("**SDRAM candidates:**")
+                for buf_name in ram["sdram_candidates"]:
+                    st.markdown(f"- `{buf_name}`")
+
+        # Collect current params for export
+        export_params: dict = {}
+        for param_name_e, spec_e in specs.items():
+            if param_name_e == "mix":
+                continue
+            if spec_e["type"] == "knob":
+                export_params[param_name_e] = st.session_state.get(
+                    f"knob_{param_name_e}", spec_e["default"]
+                )
+            elif spec_e["type"] == "switch":
+                export_params[param_name_e] = st.session_state.get(
+                    f"switch_{param_name_e}", spec_e["default"]
+                )
+
+        # Code Preview
+        with st.expander("Code Preview", expanded=False):
+            header_code = generate_header(
+                algo_instance, export_params, knob_mapping
+            )
+            source_code = generate_source(algo_instance, export_params)
+            callback_code = generate_audio_callback(
+                algo_instance, knob_mapping
+            )
+
+            st.markdown("**Header (.h)**")
+            st.code(header_code, language="c")
+            st.markdown("**Source (.c)**")
+            st.code(source_code, language="c")
+            st.markdown("**AudioCallback (.cpp)**")
+            st.code(callback_code, language="c")
+
+        # Save Button
+        if st.button("Save to daisyexport/"):
+            result = export_to_files(
+                algo_instance, export_params, knob_mapping,
+                output_dir="daisyexport",
+            )
+            st.success(
+                f"Exported to:\n"
+                f"- {result['header_path']}\n"
+                f"- {result['source_path']}\n"
+                f"- {result['callback_path']}"
+            )
+
+    st.divider()
+
     # -- Reset button --
     reset_clicked = st.button("Reset to Defaults")
 
@@ -247,6 +396,13 @@ if reset_clicked:
         del st.session_state["current_algo"]
     for k in ["preset_name", "_preset_values"]:
         if k in st.session_state:
+            del st.session_state[k]
+    # Clear export state on reset
+    st.session_state["knob_mapping"] = {}
+    st.session_state["export_preview"] = False
+    st.session_state["export_algo"] = None
+    for k in list(st.session_state.keys()):
+        if k.startswith("export_knob_") or k.startswith("export_switch_"):
             del st.session_state[k]
     st.rerun()
 
@@ -303,6 +459,37 @@ if process_clicked and audio_data is not None:
     st.session_state["wet_audio"] = results["wet"]
     st.session_state["results"] = results
     st.session_state["original_length"] = results.get("original_length")
+
+# ---------------------------------------------------------------------------
+# Main area -- Signal Flow Diagram
+# ---------------------------------------------------------------------------
+
+st.subheader("Signal Flow")
+detail_level = st.radio(
+    "Detail Level",
+    ["Block", "Component"],
+    horizontal=True,
+    key="diagram_detail",
+)
+
+# Collect current params for diagram
+_diagram_params: dict = {}
+for _pname, _pspec in specs.items():
+    if _pname == "mix":
+        continue
+    if _pspec["type"] == "knob":
+        _diagram_params[_pname] = st.session_state.get(
+            f"knob_{_pname}", _pspec["default"]
+        )
+    elif _pspec["type"] == "switch":
+        _diagram_params[_pname] = st.session_state.get(
+            f"switch_{_pname}", _pspec["default"]
+        )
+
+dot_string = algo_instance.to_dot(
+    detail_level=detail_level.lower(), params=_diagram_params
+)
+st.graphviz_chart(dot_string)
 
 # ---------------------------------------------------------------------------
 # Main area -- display results

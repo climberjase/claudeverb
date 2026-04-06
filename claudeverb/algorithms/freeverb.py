@@ -335,3 +335,222 @@ class Freeverb(ReverbAlgorithm):
                 "labels": ["Mono", "Stereo", "Wide"],
             },
         }
+
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for Freeverb signal flow.
+
+        Block level (~7 nodes): Input -> Pre-Delay -> 8 Parallel Combs ->
+            4 Series Allpass -> Stereo Mix -> Output.
+        Component level (~20 nodes): Expands each comb and allpass as
+            individual nodes with feedback coefficients.
+        """
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        room = p.get("room_size", 75)
+        damp = p.get("damping", 25)
+        mix_val = p.get("mix", 75)
+        width = p.get("width", 100)
+        pre_d = p.get("pre_delay", 0)
+        hf = p.get("hf_damp", 0)
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += edge("input", "pre_delay")
+
+            # 8 individual comb filters in a subgraph
+            comb_nodes = ""
+            for i, length in enumerate(self.COMB_LENGTHS_44100):
+                scaled = self._scale_length(length)
+                comb_nodes += dsp_node(
+                    f"comb{i}",
+                    f"Comb {i}\\n[{scaled} smp]\\nfb: {room}",
+                )
+            body += subgraph("combs", "8 Parallel Comb Filters", comb_nodes)
+
+            for i in range(8):
+                body += edge("pre_delay", f"comb{i}")
+
+            # Sum node
+            body += dsp_node("comb_sum", "Sum")
+            for i in range(8):
+                body += edge(f"comb{i}", "comb_sum")
+                body += feedback_edge(f"comb{i}", f"comb{i}", label="fb")
+
+            # 4 individual allpass filters
+            ap_nodes = ""
+            for i, length in enumerate(self.ALLPASS_LENGTHS_44100):
+                scaled = self._scale_length(length)
+                ap_nodes += dsp_node(
+                    f"ap{i}",
+                    f"Allpass {i}\\n[{scaled} smp]",
+                )
+            body += subgraph("allpasses", "4 Series Allpass Filters", ap_nodes)
+
+            body += edge("comb_sum", "ap0")
+            for i in range(3):
+                body += edge(f"ap{i}", f"ap{i+1}")
+
+            body += dsp_node("stereo_mix", f"Stereo Mix\\nwidth: {width}")
+            body += dsp_node("dry_wet", f"Dry/Wet\\nmix: {mix_val}")
+            body += io_node("output", "Output")
+
+            body += edge("ap3", "stereo_mix")
+            body += edge("stereo_mix", "dry_wet")
+            body += edge("dry_wet", "output")
+            body += edge("input", "dry_wet", label="dry", style="dotted")
+
+            return digraph_wrap("Freeverb", body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("combs", f"8 Parallel Combs\\nroom: {room}\\ndamp: {damp}")
+            body += dsp_node("allpasses", f"4 Series Allpass")
+            body += dsp_node("stereo_mix", f"Stereo Mix\\nwidth: {width}")
+            body += dsp_node("dry_wet", f"Dry/Wet\\nmix: {mix_val}\\nhf_damp: {hf}")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "combs")
+            body += edge("combs", "allpasses")
+            body += feedback_edge("combs", "combs", label="feedback")
+            body += edge("allpasses", "stereo_mix")
+            body += edge("stereo_mix", "dry_wet")
+            body += edge("dry_wet", "output")
+
+            return digraph_wrap("Freeverb", body)
+
+    def to_c_struct(self) -> str:
+        """Return C typedef struct for the Freeverb state."""
+        # Compute scaled lengths at 48 kHz
+        spread = self._scale_length(self.STEREO_SPREAD_44100)
+        comb_l = [self._scale_length(l) for l in self.COMB_LENGTHS_44100]
+        comb_r = [self._scale_length(l) + spread for l in self.COMB_LENGTHS_44100]
+        ap_l = [self._scale_length(l) for l in self.ALLPASS_LENGTHS_44100]
+        ap_r = [self._scale_length(l) + spread for l in self.ALLPASS_LENGTHS_44100]
+        max_pre_delay = math.ceil(0.1 * SAMPLE_RATE)
+
+        lines = ["typedef struct {"]
+        lines.append("    // Left comb filter delay buffers (8)")
+        for i, size in enumerate(comb_l):
+            lines.append(f"    float comb_buf_l{i}[{size}];")
+        lines.append("    // Right comb filter delay buffers (8)")
+        for i, size in enumerate(comb_r):
+            lines.append(f"    float comb_buf_r{i}[{size}];")
+        lines.append("    int comb_write_idx_l[8];")
+        lines.append("    int comb_write_idx_r[8];")
+        lines.append("    float comb_filterstore_l[8];  // LP filter state per comb")
+        lines.append("    float comb_filterstore_r[8];")
+        lines.append("")
+        lines.append("    // Left allpass filter delay buffers (4)")
+        for i, size in enumerate(ap_l):
+            lines.append(f"    float allpass_buf_l{i}[{size}];")
+        lines.append("    // Right allpass filter delay buffers (4)")
+        for i, size in enumerate(ap_r):
+            lines.append(f"    float allpass_buf_r{i}[{size}];")
+        lines.append("    int allpass_write_idx_l[4];")
+        lines.append("    int allpass_write_idx_r[4];")
+        lines.append("")
+        lines.append(f"    // Pre-delay line (max 100ms at 48kHz)")
+        lines.append(f"    float pre_delay_buf[{max_pre_delay}];")
+        lines.append("    int pre_delay_write_idx;")
+        lines.append("    int pre_delay_samples;")
+        lines.append("")
+        lines.append("    // Parameters")
+        lines.append("    float room_size;")
+        lines.append("    float damping;")
+        lines.append("    float mix;")
+        lines.append("    float width;")
+        lines.append("    float hf_damp;")
+        lines.append("    float room_scaled;")
+        lines.append("    float damp_scaled;")
+        lines.append("    float mix_scaled;")
+        lines.append("    float width_scaled;")
+        lines.append("    int frozen;")
+        lines.append("    int sample_rate;")
+        lines.append("} FreeverbState;")
+        return "\n".join(lines) + "\n"
+
+    def to_c_process_fn(self) -> str:
+        """Return C process function template for Freeverb."""
+        comb_l = [self._scale_length(l) for l in self.COMB_LENGTHS_44100]
+        comb_r_sizes = [self._scale_length(l) + self._scale_length(self.STEREO_SPREAD_44100)
+                        for l in self.COMB_LENGTHS_44100]
+        ap_l = [self._scale_length(l) for l in self.ALLPASS_LENGTHS_44100]
+        ap_r_sizes = [self._scale_length(l) + self._scale_length(self.STEREO_SPREAD_44100)
+                      for l in self.ALLPASS_LENGTHS_44100]
+
+        comb_sizes_l = ", ".join(str(s) for s in comb_l)
+        comb_sizes_r = ", ".join(str(s) for s in comb_r_sizes)
+        ap_sizes_l = ", ".join(str(s) for s in ap_l)
+        ap_sizes_r = ", ".join(str(s) for s in ap_r_sizes)
+
+        return f"""\
+void freeverb_process(FreeverbState* state, const float* input,
+                      float* output_left, float* output_right,
+                      int num_samples) {{
+    const int comb_lengths_l[8] = {{{comb_sizes_l}}};
+    const int comb_lengths_r[8] = {{{comb_sizes_r}}};
+    const int ap_lengths_l[4] = {{{ap_sizes_l}}};
+    const int ap_lengths_r[4] = {{{ap_sizes_r}}};
+    const float fixed_gain = 0.015f;
+
+    float wet1 = state->mix_scaled * (1.0f + state->width_scaled) / 2.0f;
+    float wet2 = state->mix_scaled * (1.0f - state->width_scaled) / 2.0f;
+    float dry_gain = 1.0f - state->mix_scaled;
+
+    float room_feedback = state->frozen ? 1.0f : state->room_scaled;
+    float damp_value = state->frozen ? 0.0f : state->damp_scaled;
+
+    for (int i = 0; i < num_samples; i++) {{
+        float x = input[i] * fixed_gain;
+        if (state->frozen) x = 0.0f;
+
+        // Pre-delay
+        if (state->pre_delay_samples > 0) {{
+            int rd = (state->pre_delay_write_idx - state->pre_delay_samples
+                      + {math.ceil(0.1 * SAMPLE_RATE)}) % {math.ceil(0.1 * SAMPLE_RATE)};
+            float delayed = state->pre_delay_buf[rd];
+            state->pre_delay_buf[state->pre_delay_write_idx] = x;
+            state->pre_delay_write_idx =
+                (state->pre_delay_write_idx + 1) % {math.ceil(0.1 * SAMPLE_RATE)};
+            x = delayed;
+        }}
+
+        // 8 parallel comb filters (left channel)
+        float comb_sum_l = 0.0f;
+        // Process each comb via macro-unrolled loop
+        // comb_process: out = buf[read]; buf[write] = out*fb + x; filterstore LP
+        float* comb_bufs_l[8];
+        // (In practice, use direct struct member access per comb)
+
+        // Left: 8 combs -> 4 allpasses
+        float out_l = 0.0f;
+        // ... (unrolled comb + allpass processing)
+
+        // Right: 8 combs -> 4 allpasses
+        float out_r = 0.0f;
+        // ... (unrolled comb + allpass processing)
+
+        // Stereo width crossmix and dry/wet blend
+        float final_l = input[i] * dry_gain + out_l * wet1 + out_r * wet2;
+        float final_r = input[i] * dry_gain + out_r * wet1 + out_l * wet2;
+
+        // Hard clip
+        if (final_l > 1.0f) final_l = 1.0f;
+        if (final_l < -1.0f) final_l = -1.0f;
+        if (final_r > 1.0f) final_r = 1.0f;
+        if (final_r < -1.0f) final_r = -1.0f;
+
+        output_left[i] = final_l;
+        output_right[i] = final_r;
+    }}
+}}
+"""
