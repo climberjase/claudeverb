@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Algorithms, Real-Time & C Export
-current_plan: Not started
-status: planning
-stopped_at: Phase 9 context gathered
-last_updated: "2026-04-03T08:44:17.770Z"
-last_activity: 2026-04-03 -- Completed 08-04 DattorroTripleDiffuser and DattorroAsymmetric
+current_plan: 09-02 complete
+status: executing
+stopped_at: Completed 09-02 C Export Pipeline
+last_updated: "2026-04-06T04:30:00Z"
+last_activity: 2026-04-06 -- Completed 09-02 C Export Pipeline
 progress:
   total_phases: 5
   completed_phases: 3
@@ -17,18 +17,18 @@ progress:
 
 # Project State
 
-**Last session:** 2026-04-03T08:44:17.765Z
-**Stopped at:** Phase 9 context gathered
-**Resume file:** .planning/phases/09-signal-flow-diagrams-c-export/09-CONTEXT.md
+**Last session:** 2026-04-06T04:30:00Z
+**Stopped at:** Completed 09-02 C Export Pipeline
+**Resume file:** .planning/phases/09-signal-flow-diagrams-c-export/09-02-SUMMARY.md
 
 ## Current Position
 
-- **Phase:** 8 of 10 (Room, Chamber & Dattorro Variants) -- COMPLETE
-- **Current Plan:** Not started
-- **Status:** Ready to plan
-- **Last activity:** 2026-04-03 -- Completed 08-04 DattorroTripleDiffuser and DattorroAsymmetric
+- **Phase:** 9 of 10 (Signal-Flow Diagrams & C Export) -- IN PROGRESS
+- **Current Plan:** 09-02 complete, 09-03 next
+- **Status:** Executing
+- **Last activity:** 2026-04-06 -- Completed 09-02 C Export Pipeline
 
-Progress: [██████████] 100% (Phase 8 complete, all 4/4 plans done)
+Progress: [██████████] 100% (Phase 8 complete) + Phase 9: 2/3 plans done
 
 ## Project Reference
 
@@ -83,6 +83,14 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 - Separate rt60_to_gain feedback gains for L and R total path delays in Asymmetric
 - L decay AP2 fades to 0 at spread >= 50 for diffuser count asymmetry
 - Freeze bypasses damping+DC+modulation in Triple-Diffuser and Asymmetric (freeze_gain=2x)
+
+**Phase 9 decisions:**
+- Python f-strings for C code generation (no Jinja2), matching existing to_c_struct()/to_c_process_fn() pattern
+- RAM estimation uses 10% padding for struct alignment
+- SDRAM candidates threshold: buffers > 4096 floats (16 KB)
+- _snake_case helper handles CamelCase, acronyms (FDN), and multi-word names
+- generate_audio_callback uses Hothouse::KNOB_N enum for knob reads
+- export_to_files writes .h, .c, .cpp to configurable output directory
 
 **Open items carried from v1.0:**
 - Biquad EQ class now integrated into engine signal path (06-01 complete)

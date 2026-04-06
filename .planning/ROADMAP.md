@@ -124,5 +124,5 @@ Phases execute in numeric order: 6 -> 6.1 -> 6.2 -> 7 -> ... -> 10
 | 6. Playback Enhancements & EQ | v1.1 | 3/4 | Gap closure in progress | 2026-03-09 |
 | 7. FDN Reverb Algorithm | 2/2 | Complete   | 2026-03-12 | - |
 | 8. Room, Chamber & Dattorro Variants | 4/4 | Complete   | 2026-04-03 | - |
-| 9. Signal-Flow Diagrams & C Export | v1.1 | 0/3 | Planned | - |
+| 9. Signal-Flow Diagrams & C Export | v1.1 | 2/3 | In progress | - |
 | 10. Real-Time Playback | v1.1 | 0/? | Not started | - |
