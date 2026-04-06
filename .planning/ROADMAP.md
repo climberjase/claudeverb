@@ -95,8 +95,8 @@ Plans:
   5. Exported code includes an AudioCallback template matching the Hothouse pedal's knob/switch layout
 **Plans:** 3 plans
 Plans:
-- [ ] 09-01-PLAN.md -- Signal-flow DOT diagram generation for all 9 algorithms (to_dot + dot_builder)
-- [ ] 09-02-PLAN.md -- C export pipeline: missing methods, header/source generation, RAM estimation, AudioCallback
+- [x] 09-01-PLAN.md -- Signal-flow DOT diagram generation for all 9 algorithms (to_dot + dot_builder)
+- [x] 09-02-PLAN.md -- C export pipeline: missing methods, header/source generation, RAM estimation, AudioCallback
 - [ ] 09-03-PLAN.md -- Streamlit UI integration for diagrams and export workflow
 
 ### Phase 10: Real-Time Playback
