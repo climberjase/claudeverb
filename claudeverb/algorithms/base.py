@@ -66,6 +66,31 @@ class ReverbAlgorithm(ABC):
             (min, max, default, unit, etc.).
         """
 
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate a Graphviz DOT string representing the signal flow.
+
+        Args:
+            detail_level: Either "block" (5-10 nodes, major DSP stages)
+                or "component" (15-30 nodes, individual elements).
+            params: Parameter values to display in labels. If None,
+                uses defaults from param_specs.
+
+        Returns:
+            DOT string suitable for rendering with Graphviz.
+        """
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge,
+        )
+        # Default placeholder for algorithms without custom to_dot()
+        name = type(self).__name__
+        body = io_node("input", "Input")
+        body += dsp_node("algo", f"{name}\\n(no diagram yet)")
+        body += io_node("output", "Output")
+        body += edge("input", "algo")
+        body += edge("algo", "output")
+        return digraph_wrap(name, body)
+
     def process(self, audio: np.ndarray) -> np.ndarray:
         """Validate input and delegate to _process_impl.
 
