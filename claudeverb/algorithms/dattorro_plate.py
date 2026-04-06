@@ -594,3 +594,271 @@ class DattorroPlate(ReverbAlgorithm):
                 "labels": ["Mono", "Stereo", "Wide"],
             },
         }
+
+    def to_dot(self, detail_level: str = "block",
+               params: dict | None = None) -> str:
+        """Generate Graphviz DOT string for DattorroPlate signal flow."""
+        from claudeverb.export.dot_builder import (
+            digraph_wrap, dsp_node, io_node, edge, feedback_edge, subgraph,
+        )
+        p = params if params else {
+            k: v["default"] for k, v in self.param_specs.items()
+            if v.get("type") == "knob"
+        }
+        decay = p.get("decay", 60)
+        bw = p.get("bandwidth", 70)
+        td = p.get("tank_damping", 30)
+        diff = p.get("diffusion", 80)
+        pre_d = p.get("pre_delay", 10)
+        mod = p.get("mod_depth", 30)
+
+        if detail_level == "component":
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("bw_filter", f"Bandwidth LP\\n[{bw}]")
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "bw_filter")
+
+            # 4 input allpass diffusers
+            ap_nodes = ""
+            for i, (length, coeff) in enumerate(zip(INPUT_AP_LENGTHS, INPUT_AP_COEFFS)):
+                scaled = self._scale_length(length)
+                ap_nodes += dsp_node(f"iap{i}", f"Input AP {i}\\n[{scaled} smp]\\ncoeff: {coeff}")
+            body += subgraph("input_diff", f"Input Diffusers (diff: {diff})", ap_nodes)
+
+            body += edge("bw_filter", "iap0")
+            for i in range(3):
+                body += edge(f"iap{i}", f"iap{i+1}")
+
+            # Left tank half
+            lt_nodes = ""
+            lt_nodes += dsp_node("dap1_l", f"Decay AP1 L\\n[{self._scale_length(DECAY_AP1_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("td1_l", f"Delay 1 L (mod)\\n[{self._scale_length(TANK_DELAY1_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("damp_l", f"Damping L\\n[{td}]")
+            lt_nodes += dsp_node("dap2_l", f"Decay AP2 L\\n[{self._scale_length(DECAY_AP2_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("td2_l", f"Delay 2 L\\n[{self._scale_length(TANK_DELAY2_LENGTHS[0])} smp]")
+            lt_nodes += dsp_node("dc_l", "DC Block L")
+            body += subgraph("tank_left", "Left Tank", lt_nodes)
+
+            # Right tank half
+            rt_nodes = ""
+            rt_nodes += dsp_node("dap1_r", f"Decay AP1 R\\n[{self._scale_length(DECAY_AP1_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("td1_r", f"Delay 1 R (mod)\\n[{self._scale_length(TANK_DELAY1_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("damp_r", f"Damping R\\n[{td}]")
+            rt_nodes += dsp_node("dap2_r", f"Decay AP2 R\\n[{self._scale_length(DECAY_AP2_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("td2_r", f"Delay 2 R\\n[{self._scale_length(TANK_DELAY2_LENGTHS[1])} smp]")
+            rt_nodes += dsp_node("dc_r", "DC Block R")
+            body += subgraph("tank_right", "Right Tank", rt_nodes)
+
+            body += dsp_node("lfo", f"LFO\\nmod: {mod}")
+            body += io_node("output", "Output")
+
+            # Left tank flow
+            body += edge("iap3", "dap1_l")
+            body += edge("dap1_l", "td1_l")
+            body += edge("td1_l", "damp_l")
+            body += edge("damp_l", "dap2_l")
+            body += edge("dap2_l", "td2_l")
+            body += edge("td2_l", "dc_l")
+
+            # Right tank flow
+            body += edge("iap3", "dap1_r")
+            body += edge("dap1_r", "td1_r")
+            body += edge("td1_r", "damp_r")
+            body += edge("damp_r", "dap2_r")
+            body += edge("dap2_r", "td2_r")
+            body += edge("td2_r", "dc_r")
+
+            # Cross-feedback
+            body += feedback_edge("dc_r", "dap1_l", label=f"decay: {decay}")
+            body += feedback_edge("dc_l", "dap1_r", label=f"decay: {decay}")
+
+            # LFO modulation
+            body += edge("lfo", "td1_l", style="dotted", color="blue")
+            body += edge("lfo", "td1_r", style="dotted", color="blue")
+
+            # Output taps
+            body += edge("dc_l", "output")
+            body += edge("dc_r", "output")
+
+            return digraph_wrap("DattorroPlate", body)
+        else:
+            # Block level
+            body = io_node("input", "Input")
+            body += dsp_node("pre_delay", f"Pre-Delay\\n[{pre_d}]")
+            body += dsp_node("input_diff", f"Input Diffusers\\ndiff: {diff}\\nbw: {bw}")
+            body += dsp_node("tank_left", f"Tank Left\\ndecay: {decay}")
+            body += dsp_node("tank_right", f"Tank Right\\ndecay: {decay}")
+            body += dsp_node("output_taps", f"Output Taps\\nmod: {mod}")
+            body += io_node("output", "Output")
+
+            body += edge("input", "pre_delay")
+            body += edge("pre_delay", "input_diff")
+            body += edge("input_diff", "tank_left")
+            body += edge("input_diff", "tank_right")
+            body += edge("tank_left", "output_taps")
+            body += edge("tank_right", "output_taps")
+            body += feedback_edge("tank_right", "tank_left", label="cross-fb")
+            body += feedback_edge("tank_left", "tank_right", label="cross-fb")
+            body += edge("output_taps", "output")
+
+            return digraph_wrap("DattorroPlate", body)
+
+    def to_c_struct(self) -> str:
+        """Return C typedef struct for the DattorroPlate state."""
+        # Compute scaled lengths at 48 kHz
+        input_ap = [self._scale_length(l) for l in INPUT_AP_LENGTHS]
+        decay_ap1 = [self._scale_length(l) for l in DECAY_AP1_LENGTHS]
+        decay_ap2 = [self._scale_length(l) for l in DECAY_AP2_LENGTHS]
+        tank_d1 = [self._scale_length(l) + MAX_MOD_EXCURSION + 2
+                    for l in TANK_DELAY1_LENGTHS]
+        tank_d2 = [self._scale_length(l) for l in TANK_DELAY2_LENGTHS]
+        max_pre_delay = math.ceil(0.1 * SAMPLE_RATE)
+
+        return f"""\
+typedef struct {{
+    // Input allpass diffuser buffers (4)
+    float input_ap_buf_0[{input_ap[0]}];
+    float input_ap_buf_1[{input_ap[1]}];
+    float input_ap_buf_2[{input_ap[2]}];
+    float input_ap_buf_3[{input_ap[3]}];
+    int input_ap_write_idx[4];
+    float input_ap_coeffs[4];  // {{0.75, 0.75, 0.625, 0.625}}
+
+    // Decay allpass diffuser buffers (2 per tank half)
+    float decay_ap1_buf_0[{decay_ap1[0]}];  // left AP1
+    float decay_ap1_buf_1[{decay_ap1[1]}];  // right AP1
+    float decay_ap2_buf_0[{decay_ap2[0]}];  // left AP2
+    float decay_ap2_buf_1[{decay_ap2[1]}];  // right AP2
+    int decay_ap_write_idx[4];
+    float decay_diff1_coeff;
+    float decay_diff2_coeff;
+
+    // Tank delay buffers (4: 2 modulated delay1 + 2 delay2)
+    float tank_delay_buf_0[{tank_d1[0]}];   // left delay1 (modulated)
+    float tank_delay_buf_1[{tank_d2[0]}];   // left delay2
+    float tank_delay_buf_2[{tank_d1[1]}];   // right delay1 (modulated)
+    float tank_delay_buf_3[{tank_d2[1]}];   // right delay2
+    int tank_delay_write_idx[4];
+
+    // Bandwidth filter (one-pole LP on input)
+    float bw_coeff;
+    float bw_state;
+
+    // Damping filters (one-pole LP, one per tank half)
+    float damp_coeff;
+    float damp_state[2];
+
+    // DC blockers (one per tank half)
+    float dc_r;
+    float dc_x_prev[2];
+    float dc_y_prev[2];
+
+    // LFO state
+    float lfo_phase;
+    float lfo_phase_inc;
+    float mod_depth;
+
+    // Pre-delay line (max 100ms at 48kHz)
+    float pre_delay_buf[{max_pre_delay}];
+    int pre_delay_write_idx;
+    int pre_delay_samples;
+
+    // Cross-feedback state
+    float tank_left_out;
+    float tank_right_out;
+
+    // Parameters
+    float decay;
+    float bandwidth;
+    float damping;
+    float diffusion;
+    float pre_delay_ms;
+    float mod_depth_param;
+    int frozen;
+    int shimmer;
+    float width;
+    int sample_rate;
+}} DattorroPlateState;
+"""
+
+    def to_c_process_fn(self) -> str:
+        """Return C process function template for DattorroPlate."""
+        base_d1_l = self._scale_length(TANK_DELAY1_LENGTHS[0])
+        base_d1_r = self._scale_length(TANK_DELAY1_LENGTHS[1])
+        base_d2_l = self._scale_length(TANK_DELAY2_LENGTHS[0])
+        base_d2_r = self._scale_length(TANK_DELAY2_LENGTHS[1])
+        max_pre = math.ceil(0.1 * SAMPLE_RATE)
+
+        return f"""\
+void dattorro_plate_process(DattorroPlateState* state, const float* input,
+                            float* output_left, float* output_right,
+                            int num_samples) {{
+    float wet1 = (1.0f + state->width) / 2.0f;
+    float wet2 = (1.0f - state->width) / 2.0f;
+    float decay = state->frozen ? 1.0f : state->decay;
+    float output_gain = 1.5f;
+
+    for (int i = 0; i < num_samples; i++) {{
+        float x = input[i];
+        if (state->frozen) x = 0.0f;
+
+        // 1. Pre-delay (circular buffer)
+        if (state->pre_delay_samples > 0) {{
+            int rd = (state->pre_delay_write_idx - state->pre_delay_samples
+                      + {max_pre}) % {max_pre};
+            float delayed = state->pre_delay_buf[rd];
+            state->pre_delay_buf[state->pre_delay_write_idx] = x;
+            state->pre_delay_write_idx =
+                (state->pre_delay_write_idx + 1) % {max_pre};
+            x = delayed;
+        }}
+
+        // 2. Bandwidth filter (one-pole LP)
+        state->bw_state = x * state->bw_coeff
+            + state->bw_state * (1.0f - state->bw_coeff);
+        x = state->bw_state;
+
+        // 3. Input allpass diffusion (4 cascaded)
+        for (int d = 0; d < 4; d++) {{
+            // allpass: v = x + coeff * buf[read]; y = buf[read] - coeff * v
+        }}
+        float tank_input = x;
+
+        // 4. LFO
+        float lfo_left = sinf(state->lfo_phase) * state->mod_depth;
+        float lfo_right = sinf(state->lfo_phase + M_PI) * state->mod_depth;
+        state->lfo_phase += state->lfo_phase_inc;
+        if (state->lfo_phase >= 2.0f * M_PI)
+            state->lfo_phase -= 2.0f * M_PI;
+
+        // 5. LEFT TANK HALF
+        float left_in = tank_input + decay * state->tank_right_out;
+        // Decay AP1 (negative feedback) -> modulated delay1 -> damping -> decay -> AP2 -> delay2 -> DC block
+        // ... (process through delay chain)
+
+        // 6. RIGHT TANK HALF
+        float right_in = tank_input + decay * state->tank_left_out;
+        // Same structure as left half with right buffers
+
+        // 7. Output taps (multi-tap from tank delay lines)
+        float out_l = 0.0f;  // sum of 7 taps with signs
+        float out_r = 0.0f;  // sum of 7 taps with signs
+        out_l *= output_gain;
+        out_r *= output_gain;
+
+        // 8. Width crossmix
+        float final_l = out_l * wet1 + out_r * wet2;
+        float final_r = out_r * wet1 + out_l * wet2;
+
+        // 9. Hard clip
+        if (final_l > 1.0f) final_l = 1.0f;
+        if (final_l < -1.0f) final_l = -1.0f;
+        if (final_r > 1.0f) final_r = 1.0f;
+        if (final_r < -1.0f) final_r = -1.0f;
+
+        output_left[i] = final_l;
+        output_right[i] = final_r;
+    }}
+}}
+"""
