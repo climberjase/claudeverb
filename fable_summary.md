@@ -85,6 +85,11 @@ The physically accurate spring: offline eigendecomposition of the helical-spring
 - **A37 grouped FDNs** (coupled-room multi-slope decay), **A38 directional FDN** (ambisonic anisotropic decay), **A42 Erbe-Verb** (granular size-morph + audio-rate everything), **A43 dispersive FDN** (spring-flavored FDN hybrid — a sound no hardware offers).
 - **A44 converter-in-the-loop nonlinearity** (EMT 250 / Valhalla Sanctuary: bit reduction + floating-point gain-ranging inside the tank — verified from the designer's documentation; the digital cousin of the tube-spring loop saturator, trivially addable to any tank here).
 
+## Top picks (detailed implementation specs)
+
+Three approaches have been worked into full implementation recommendations with Python/C code:
+`fable_toppick_hall_m7.md` (M7-style hall, from #2) · `fable_toppick_chamber_figure8.md` (Griesinger figure-8 chamber, from #1/#6) · `fable_toppick_spring_tube.md` (tube spring, from #4/#5).
+
 ## Suggested implementation order for claudeverb
 
 1. **#3 Barr ring** (small, C-exportable, immediate quality win)
