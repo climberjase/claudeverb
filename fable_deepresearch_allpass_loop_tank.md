@@ -13,6 +13,8 @@
 
 **The topology.** A **single feedback ring of 4 repeated blocks, each block = [delay] → [decay gain RT] → [2 series allpasses]**, damping filters in each block, input injected at two points, outputs tapped from the plain delays — never from inside an allpass ("to avoid the metallic sound that can result"). In Costello's words: Barr's building block was a **"2 allpass, 1 delay unit"**, and the design "injects input everywhere but takes output in only two places, allowing the sound to keep coming fresh as the thing decays away."
 
+Barr's own words (Spin knowledge base, verified verbatim): *"The best resonator topology uses delays and all passes in a loop, usually two all passes, 1 delay, 2 allpasses, 1 delay, repeat as required, tied into single loop, with inputs injected at the juncture of delay outputs and the allpass pair input, and outputs taken from delays as required"* — and his modulation prescription: *"chorus generators can be placed in the delay element of a few of the all passes, which smears out any resonances that may arise in the reverb tail, with **SIN on one and COS on another from a single LFO** working well."* (The FV-1's two hardware SIN/COS LFOs with interpolated `CHO RDA` reads exist to make exactly this cheap.) Production proof that the topology scales: ValhallaVintageVerb's **Cathedral** mode is a scaled-up port of an FV-1 algorithm Costello wrote in 2014 — the original corresponds exactly to Size = 50% in the plugin (https://valhalladsp.com/2023/02/10/valhallavintageverb-the-modes/).
+
 ASCII of `rom_rev1` (delay lengths in samples @ 32,768 Hz, from the Faust port):
 
 ```

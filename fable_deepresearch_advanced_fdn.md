@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-05
 
-> A33 time-varying (spinning) feedback matrices · A34 filter/velvet feedback matrices & VFDN · A35 allpass FDN theory · A36 accurate T60 attenuation filters · A37 grouped/coupled FDNs · A38 directional FDN · A42 Erbe-Verb · A43 dispersive-FDN hybrids & moving-tap reverbs.
+> A33 time-varying (spinning) feedback matrices · A34 filter/velvet feedback matrices & VFDN · A35 allpass FDN theory · A36 accurate T60 attenuation filters · A37 grouped/coupled FDNs · A38 directional FDN · A42 Erbe-Verb · A43 dispersive-FDN hybrids & moving-tap reverbs · A44 converter-in-the-loop nonlinearity (EMT 250 / Sanctuary).
 > 
 > Extracted from `Fable_research_detail.md` — the A-numbering, appendices (comparison tables, license summary, caveats) and the top-20 ranking (`fable_summary.md`) live there.
 
@@ -89,5 +89,23 @@ Each feedback path becomes a short *diffusing FIR* instead of a scalar — model
 **(b) Ursa Major Space Station (Christopher Moore):** multitap delay with **time-varying (moving) taps** feeding back — the third historical school besides Lexicon and Barr (documented in Erbe's ICMC paper as one of the studied topologies). Moving output taps = per-tap Doppler → the "swirly" 70s broadcast reverb; modern restatement: randomize tap positions with slew-limited noise (cf. A3 wander).
 
 **(c) Chirp-modulated loops:** time-varying allpass coefficients inside a loop modulate chirp rate directly (Pekonen et al., "Spectral Delay Filters with Feedback and Time-Varying Coefficients," DAFx-09 — slides: http://research.spa.aalto.fi/publications/papers/dafx09-sdf/Pekonen2009DAFxslides.pdf) — vibrato-of-dispersion, a uniquely "alive" spring wobble.
+
+## A44. Converter-in-the-loop nonlinearity (EMT 250 / Valhalla Sanctuary style)
+
+
+**What it is.** Deliberately embedding the **nonlinearities of early digital converters inside the reverb signal path** as part of the sound. Verified from the designer's own documentation: ValhallaVintageVerb's **Sanctuary** mode (modeled on the EMT 250, the 1970s German digital reverberator) "incorporates the **bit reduction and floating-point gain control** used in the A/D and D/A convertors of the early digital hardware" — i.e. a gain-ranging (floating-point-style companding) converter model plus mantissa truncation applied to the recirculating signal (https://valhalladsp.com/2023/02/10/valhallavintageverb-the-modes/; background: https://valhalladsp.wordpress.com/tag/emt250/; Costello's AES 2015 talk: https://www.aes-media.org/sections/pnw/ppt/costello/AES2015ReverbPresentation.pdf).
+
+**Why this is a distinct approach.** It is the digital cousin of the tube-spring saturator (A23): a **level-dependent nonlinearity inside the loop** that regenerates texture on every pass. Gain-ranging converters compress-then-expand around the tank, so quantization noise is loudest exactly when the signal masks it and the tail gains a faint animated "breathing" noise floor — the same mechanism as the 224's 6-bit-coefficient "halo" (A1) and CloudSeed's deliberate non-interpolated reads (A7). Related production strategy verified from the same source: **Random Space** mode uses Griesinger-style *internal delay-length randomization* (not chorused LFOs) to suppress metallic ringing without audible pitch shift.
+
+**Implementation sketch:**
+
+```
+inside the loop, per delay-line write:
+  g_range = 2^ceil(log2(max(|x|, floor)))        # gain-ranging stage (slew-limited)
+  x_q     = quantize(x / g_range, B bits) · g_range   # B ≈ 12–16; optional error feedback
+optionally: mild sample-rate/bandwidth truncation to taste (EMT 250 ran ~24 kHz-class rates)
+```
+
+Guard the loop with a DC blocker; keep quantization *after* damping so hiss doesn't accumulate at HF. Trivial to add to any tank in this document; the payoff is "vintage rack" life without any pitch modulation.
 
 ---

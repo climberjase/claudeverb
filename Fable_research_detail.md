@@ -5,7 +5,7 @@
 
 **Exclusions (already documented in this repo, or too common):** Dattorro plate and all its parameter/topology variants (single-loop, asymmetric, triple-diffuser), Freeverb, Schroeder/Moorer classics, plain Hadamard/Householder FDN with one-pole damping, and Moorer-architecture room/chamber with tapped-delay early reflections. Dattorro's figure-8 tank appears below *only* as historical context for the Griesinger designs it was derived from.
 
-**How to use this document:** Each numbered approach (A1–A43) is self-contained: topology, math, concrete parameters, code excerpts where public source exists (with license notes), sonic character, and sources. The companion `fable_summary.md` ranks the top 20 for this project.
+**How to use this document:** Each numbered approach (A1–A44) is self-contained: topology, math, concrete parameters, code excerpts where public source exists (with license notes), sonic character, and sources. The companion `fable_summary.md` ranks the top 20 for this project.
 
 ---
 
@@ -18,7 +18,7 @@
 - **Part IV — Spring reverb:** A19 Parametric spring via spectral delay filters · A20 Waveguide spring with dispersive allpass · A21 Modal spring · A22 FDTD helical spring · A23 Tube-drive electronics chain · A24 Practical spring cores (hexefx, BYOD)
 - **Part V — Plate physical models:** A25 Finite-difference Kirchhoff plate · A26 Modal plate with physical damping · A27 Hybrid convolution head + FDN tail (EMT 140 / BX 20)
 - **Part VI — Velvet-noise family:** A28 Filtered velvet noise · A29 Interleaved velvet noise · A30 Dark velvet noise & non-exponential decay · A31 Switched convolution reverberator · A32 Velvet-noise decorrelators
-- **Part VII — Advanced networks & research architectures:** A33 Time-varying feedback matrices · A34 Filter/velvet feedback matrices & VFDN · A35 Allpass FDNs (uniallpass theory) · A36 Accurate T60 attenuation filters · A37 Grouped/coupled FDNs · A38 Directional FDN · A39 Modal reverberator · A40 Scattering delay networks · A41 Digital waveguide networks & meshes · A42 Erbe-Verb · A43 Dispersive-FDN hybrids & moving-tap reverbs
+- **Part VII — Advanced networks & research architectures:** A33 Time-varying feedback matrices · A34 Filter/velvet feedback matrices & VFDN · A35 Allpass FDNs (uniallpass theory) · A36 Accurate T60 attenuation filters · A37 Grouped/coupled FDNs · A38 Directional FDN · A39 Modal reverberator · A40 Scattering delay networks · A41 Digital waveguide networks & meshes · A42 Erbe-Verb · A43 Dispersive-FDN hybrids & moving-tap reverbs · A44 Converter-in-the-loop nonlinearity (EMT 250 / Sanctuary)
 - **Appendices:** comparison tables, license summary, source index
 
 ---
@@ -328,6 +328,8 @@ The `MultitapDiffuser` builds 1–50 taps with spacings `0.1+rand()` (normalized
 **Context.** Keith Barr (co-founder MXR, founder Alesis — MIDIVerb — then Spin Semiconductor) documented his approach in the Spin knowledge base (http://www.spinsemi.com/knowledge_base/effects.html#Reverberation) and shipped it as the FV-1 ROM reverbs. Constraints that shaped it: **32,768 Hz** sample rate, **32,768 samples (exactly 1.0 s) delay RAM**, **128 instructions/sample**, and single-cycle `RDA`/`WRAP` ops that implement one allpass in ~2 instructions. A faithful, importable port of `rom_rev1.spn` exists in the Faust libraries as `re.kb_rom_rev1` (author Luca Spanedda, **GPL-3.0**, unlike the rest of reverbs.lib): https://github.com/grame-cncm/faustlibraries/blob/master/reverbs.lib. Sean Costello's tribute (topology description + Barr's own drawings): https://valhalladsp.com/2010/08/25/rip-keith-barr/; Barr's forum thread on ring-reverb history: http://www.spinsemi.com/forum/viewtopic.php?t=3
 
 **The topology.** A **single feedback ring of 4 repeated blocks, each block = [delay] → [decay gain RT] → [2 series allpasses]**, damping filters in each block, input injected at two points, outputs tapped from the plain delays — never from inside an allpass ("to avoid the metallic sound that can result"). In Costello's words: Barr's building block was a **"2 allpass, 1 delay unit"**, and the design "injects input everywhere but takes output in only two places, allowing the sound to keep coming fresh as the thing decays away."
+
+Barr's own words (Spin knowledge base, verified verbatim): *"The best resonator topology uses delays and all passes in a loop, usually two all passes, 1 delay, 2 allpasses, 1 delay, repeat as required, tied into single loop, with inputs injected at the juncture of delay outputs and the allpass pair input, and outputs taken from delays as required"* — and his modulation prescription: *"chorus generators can be placed in the delay element of a few of the all passes, which smears out any resonances that may arise in the reverb tail, with **SIN on one and COS on another from a single LFO** working well."* (The FV-1's two hardware SIN/COS LFOs with interpolated `CHO RDA` reads exist to make exactly this cheap.) Production proof that the topology scales: ValhallaVintageVerb's **Cathedral** mode is a scaled-up port of an FV-1 algorithm Costello wrote in 2014 — the original corresponds exactly to Size = 50% in the plugin (https://valhalladsp.com/2023/02/10/valhallavintageverb-the-modes/).
 
 ASCII of `rom_rev1` (delay lengths in samples @ 32,768 Hz, from the Faust port):
 
@@ -1012,7 +1014,7 @@ v_DVN[n] = Σ_m s(m) · p_{w(m)}[n − k(m)],   p_w = rect of width w (sinc-lowp
 
 Wider pulses → lowpass ("dark") spectrum. **Efficient realization:** a small bank of recursive running-sum filters `H_w(z) = (1 − z^{−w})/(1 − z^{−1})` (2 adds each, no multiplies), one per distinct width — essentially multiplication-free.
 
-**Non-exponential decay:** draw each pulse from a **dictionary of dissipative (lowpassed) pulse filters**; convex optimization selects per-pulse filter probabilities/gains so the tail matches an **arbitrary temporal energy decay** — two-stage coupled-room decays, fade-in "bloom" tails (the M7/480L Shape behavior!), which single-slope FDNs cannot do.
+**Non-exponential decay:** draw each pulse from a **dictionary of dissipative (lowpassed) pulse filters**; each velvet pulse is routed to exactly one dictionary filter, with selection probabilities that shape the spectral evolution over time, **fitted to a target impulse response via non-negative least squares** (published JAES 72(6), 2024: mean/max T60 fit errors of 4%/8%, ~50% fewer coloration filters than filtered velvet noise). The tail matches an **arbitrary temporal energy decay** — two-stage coupled-room decays, fade-in "bloom" tails (the M7/480L Shape behavior!), which single-slope FDNs cannot do.
 
 **Binaural trick worth stealing:** the right-ear sequence reuses left-ear pulses with randomized timing offsets; jitter-distribution width parametrically sets **frequency-dependent interaural coherence at zero added cost**.
 
@@ -1161,6 +1163,23 @@ p_J  = ( 2·Σ_i Γ_i p_i⁺ ) / ( Σ_i Γ_i );      p_i⁻ = p_J − p_i⁺
 
 **(c) Chirp-modulated loops:** time-varying allpass coefficients inside a loop modulate chirp rate directly (Pekonen et al., "Spectral Delay Filters with Feedback and Time-Varying Coefficients," DAFx-09 — slides: http://research.spa.aalto.fi/publications/papers/dafx09-sdf/Pekonen2009DAFxslides.pdf) — vibrato-of-dispersion, a uniquely "alive" spring wobble.
 
+## A44. Converter-in-the-loop nonlinearity (EMT 250 / Valhalla Sanctuary style)
+
+**What it is.** Deliberately embedding the **nonlinearities of early digital converters inside the reverb signal path** as part of the sound. Verified from the designer's own documentation: ValhallaVintageVerb's **Sanctuary** mode (modeled on the EMT 250, the 1970s German digital reverberator) "incorporates the **bit reduction and floating-point gain control** used in the A/D and D/A convertors of the early digital hardware" — i.e. a gain-ranging (floating-point-style companding) converter model plus mantissa truncation applied to the recirculating signal (https://valhalladsp.com/2023/02/10/valhallavintageverb-the-modes/; background: https://valhalladsp.wordpress.com/tag/emt250/; Costello's AES 2015 talk: https://www.aes-media.org/sections/pnw/ppt/costello/AES2015ReverbPresentation.pdf).
+
+**Why this is a distinct approach.** It is the digital cousin of the tube-spring saturator (A23): a **level-dependent nonlinearity inside the loop** that regenerates texture on every pass. Gain-ranging converters compress-then-expand around the tank, so quantization noise is loudest exactly when the signal masks it and the tail gains a faint animated "breathing" noise floor — the same mechanism as the 224's 6-bit-coefficient "halo" (A1) and CloudSeed's deliberate non-interpolated reads (A7). Related production strategy verified from the same source: **Random Space** mode uses Griesinger-style *internal delay-length randomization* (not chorused LFOs) to suppress metallic ringing without audible pitch shift.
+
+**Implementation sketch:**
+
+```
+inside the loop, per delay-line write:
+  g_range = 2^ceil(log2(max(|x|, floor)))        # gain-ranging stage (slew-limited)
+  x_q     = quantize(x / g_range, B bits) · g_range   # B ≈ 12–16; optional error feedback
+optionally: mild sample-rate/bandwidth truncation to taste (EMT 250 ran ~24 kHz-class rates)
+```
+
+Guard the loop with a DC blocker; keep quantization *after* damping so hiss doesn't accumulate at HF. Trivial to add to any tank in this document; the payoff is "vintage rack" life without any pitch modulation.
+
 ---
 
 # Appendix 1 — Cross-family comparison
@@ -1232,3 +1251,4 @@ p_J  = ( 2·Σ_i Γ_i p_i⁺ ) / ( Σ_i Γ_i );      p_i⁻ = p_J − p_i⁺
 2. "Bricasti-adjacent" claims for CloudSeed and any Eventide Blackhole internals are community inference, not vendor documentation — labeled as such above.
 3. The f_C ≈ c·r/(4πR²) formula in Part IV is an order-of-magnitude reconstruction — verify against Parker & Bilbao DAFx-09 before relying on it quantitatively.
 4. All verbatim code excerpts were fetched from the linked repositories during this research session (2026-07-05); delay tables and coefficients quoted are from source, not from memory.
+5. A separate 105-agent adversarial verification pass (3 independent votes per claim, refute-by-default) was run over the core claims. All 12 synthesized findings survived 3-0: Barr loop topology + SIN/COS quadrature modulation + rom_rev1 constants, VintageVerb Random Space / Sanctuary / Cathedral facts, CloudSeed structure + SHA256 determinism, Zita-Rev1 constants and 3-band filter (with one numeric correction applied: AP feedforward delay range is 13.458–31.604 ms; feedback line length = tdelay − tdiff per branch — matching the values in A15), JPverb/GreyHole structure and RT60 law, VFDN/DVN claims, SDN properties, and the DAFx-11 spring auto-calibration. The verifier also flagged (correctly) that any Bricasti-M7-to-chorused-modulation linkage is loose — consistent with A4's "essentially unmodulated tail" conclusion — and that Cathedral's internal allpass-loop structure is inferred from FV-1 constraints rather than author-confirmed.

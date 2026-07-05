@@ -72,7 +72,7 @@ v_DVN[n] = Σ_m s(m) · p_{w(m)}[n − k(m)],   p_w = rect of width w (sinc-lowp
 
 Wider pulses → lowpass ("dark") spectrum. **Efficient realization:** a small bank of recursive running-sum filters `H_w(z) = (1 − z^{−w})/(1 − z^{−1})` (2 adds each, no multiplies), one per distinct width — essentially multiplication-free.
 
-**Non-exponential decay:** draw each pulse from a **dictionary of dissipative (lowpassed) pulse filters**; convex optimization selects per-pulse filter probabilities/gains so the tail matches an **arbitrary temporal energy decay** — two-stage coupled-room decays, fade-in "bloom" tails (the M7/480L Shape behavior!), which single-slope FDNs cannot do.
+**Non-exponential decay:** draw each pulse from a **dictionary of dissipative (lowpassed) pulse filters**; each velvet pulse is routed to exactly one dictionary filter, with selection probabilities that shape the spectral evolution over time, **fitted to a target impulse response via non-negative least squares** (published JAES 72(6), 2024: mean/max T60 fit errors of 4%/8%, ~50% fewer coloration filters than filtered velvet noise). The tail matches an **arbitrary temporal energy decay** — two-stage coupled-room decays, fade-in "bloom" tails (the M7/480L Shape behavior!), which single-slope FDNs cannot do.
 
 **Binaural trick worth stealing:** the right-ear sequence reuses left-ear pulses with randomized timing offsets; jitter-distribution width parametrically sets **frequency-dependent interaural coherence at zero added cost**.
 

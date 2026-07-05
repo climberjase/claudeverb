@@ -4,7 +4,7 @@
 **Companion to:** `Fable_research_detail.md` (43 approaches, full math/code/sources — the A-numbers below link there).
 
 **Targeted per-style extracts** (same content, split for focused reading):
-`fable_deepresearch_fundamentals.md` (shared math) · `fable_deepresearch_hall_bricasti_lexicon.md` (A1–A7) · `fable_deepresearch_allpass_loop_tank.md` (A8–A17) · `fable_deepresearch_plate.md` (A18, A25–A27) · `fable_deepresearch_spring.md` (A19–A24) · `fable_deepresearch_velvet_noise.md` (A28–A32) · `fable_deepresearch_advanced_fdn.md` (A33–A38, A42–A43) · `fable_deepresearch_modal.md` (A39) · `fable_deepresearch_room_acoustic_models.md` (A40–A41)
+`fable_deepresearch_fundamentals.md` (shared math) · `fable_deepresearch_hall_bricasti_lexicon.md` (A1–A7) · `fable_deepresearch_allpass_loop_tank.md` (A8–A17) · `fable_deepresearch_plate.md` (A18, A25–A27) · `fable_deepresearch_spring.md` (A19–A24) · `fable_deepresearch_velvet_noise.md` (A28–A32) · `fable_deepresearch_advanced_fdn.md` (A33–A38, A42–A44) · `fable_deepresearch_modal.md` (A39) · `fable_deepresearch_room_acoustic_models.md` (A40–A41)
 
 Selection criteria: sound quality first (with a bias toward Bricasti-M7-like halls and tube-spring character per the research brief), then implementability in this repo (Python prototype → tested C), then novelty relative to what claudeverb already has (Dattorro variants, Freeverb, plain FDN, Moorer rooms — all excluded).
 
@@ -83,6 +83,7 @@ The physically accurate spring: offline eigendecomposition of the helical-spring
 - **A26 modal plate / A25 FD plate** — the physical EMT 140 routes (bathtub T60).
 - **A31 switched convolution, A32 velvet decorrelators** — cheap early-field/width tools.
 - **A37 grouped FDNs** (coupled-room multi-slope decay), **A38 directional FDN** (ambisonic anisotropic decay), **A42 Erbe-Verb** (granular size-morph + audio-rate everything), **A43 dispersive FDN** (spring-flavored FDN hybrid — a sound no hardware offers).
+- **A44 converter-in-the-loop nonlinearity** (EMT 250 / Valhalla Sanctuary: bit reduction + floating-point gain-ranging inside the tank — verified from the designer's documentation; the digital cousin of the tube-spring loop saturator, trivially addable to any tank here).
 
 ## Suggested implementation order for claudeverb
 
