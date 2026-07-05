@@ -3,6 +3,9 @@
 **Date:** 2026-07-05
 **Companion to:** `Fable_research_detail.md` (43 approaches, full math/code/sources — the A-numbers below link there).
 
+**Targeted per-style extracts** (same content, split for focused reading):
+`fable_deepresearch_fundamentals.md` (shared math) · `fable_deepresearch_hall_bricasti_lexicon.md` (A1–A7) · `fable_deepresearch_allpass_loop_tank.md` (A8–A17) · `fable_deepresearch_plate.md` (A18, A25–A27) · `fable_deepresearch_spring.md` (A19–A24) · `fable_deepresearch_velvet_noise.md` (A28–A32) · `fable_deepresearch_advanced_fdn.md` (A33–A38, A42–A43) · `fable_deepresearch_modal.md` (A39) · `fable_deepresearch_room_acoustic_models.md` (A40–A41)
+
 Selection criteria: sound quality first (with a bias toward Bricasti-M7-like halls and tube-spring character per the research brief), then implementability in this repo (Python prototype → tested C), then novelty relative to what claudeverb already has (Dattorro variants, Freeverb, plain FDN, Moorer rooms — all excluded).
 
 ---
